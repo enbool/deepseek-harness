@@ -22,7 +22,7 @@ The `web/` packages let models search the public web and fetch HTTP(S) pages thr
 <a id="packages"></a>
 ## Packages
 
-Six packages play the web roles; the subsystem reference owns the exhaustive vocabulary and contracts.
+Seven packages play the web roles; the subsystem reference owns the exhaustive vocabulary and contracts.
 
 | Package | Role | ctx key |
 |---|---|---|
@@ -32,6 +32,7 @@ Six packages play the web roles; the subsystem reference owns the exhaustive voc
 | [`web-search-deepseek/`](web-search-deepseek/README.md) | Searches the web through DeepSeek native search | registers on `ctx.web` |
 | [`web-fetch-http/`](web-fetch-http/README.md) | Fetches public HTTP(S) pages anonymously | registers on `ctx.web` |
 | [`tool-web/`](tool-web/README.md) | Exposes `web_search` and `web_fetch` to the model | registers on `ctx.tools` |
+| [`tool-tgb/`](tool-tgb/README.md) | Exposes read-only taoguba (tgb.cn) data tools to the model | registers on `ctx.tools` |
 
 -----
 

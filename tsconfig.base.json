@@ -476,6 +476,7 @@
       "@deepseek-ai/dsh-tool-subagent/invariant": ["./packages/subagent/tool-subagent/src/invariant.ts"],
       "@deepseek-ai/dsh-tool-subagent-control": ["./packages/subagent/tool-subagent-control/src"],
       "@deepseek-ai/dsh-tool-terminal": ["./packages/terminal/tool-terminal/src"],
+      "@deepseek-ai/dsh-tool-tgb": ["./packages/web/tool-tgb/src"],
       "@deepseek-ai/dsh-tool-todo": ["./packages/todo/tool-todo/src"],
       "@deepseek-ai/dsh-tool-todo/invariant": ["./packages/todo/tool-todo/src/invariant.ts"],
       "@deepseek-ai/dsh-tool-web": ["./packages/web/tool-web/src"],

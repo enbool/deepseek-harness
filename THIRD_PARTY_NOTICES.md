@@ -100,6 +100,7 @@ External packages installed for runtime use or distributed inside the prebuilt b
 | [`mime-types`](https://github.com/jshttp/mime-types) | MIT |
 | [`negotiator`](https://github.com/jshttp/negotiator) | MIT |
 | [`node-addon-require-builtin`](https://www.npmjs.com/package/node-addon-require-builtin) | MIT |
+| [`node-html-parser`](https://github.com/taoqf/node-fast-html-parser) | MIT |
 | [`node-pty`](https://github.com/microsoft/node-pty) | MIT |
 | [`open`](https://github.com/sindresorhus/open) | MIT |
 | [`pdfjs-dist`](https://github.com/mozilla/pdf.js) | Apache-2.0 |
