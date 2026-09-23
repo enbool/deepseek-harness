@@ -17,7 +17,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { BloggerCorpusStore } from './corpus.ts'
 import type { CorpusBounds, HarvestedCorpus } from './corpus.ts'
 import { BLOGGER_CORPUS_EMPTY, BLOGGER_CORPUS_MISSING, BLOGGER_PROFILE_INVALID, BloggerSkillError } from './errors.ts'
-import { distillProfile, resolveRoute, writeSkillFile } from './profile.ts'
+import { distillProfile, resolveRoute, skillDirectory, writeSkillFile } from './profile.ts'
 import type { DistillLimits, ModelRoute } from './profile.ts'
 import type { BloggerCorpus, CorpusPost } from './types.ts'
 
@@ -389,7 +389,9 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
       const outcome = await distillProfile(ctx, limits, { corpus, route, session, notesRoot, signal: exec.signal })
       const profile = args.skillName === undefined ? outcome.profile : { ...outcome.profile, name: args.skillName }
       const skillsRoot = resolveRoot(options.skillsRoot, cwd)
-      const written = await writeSkillFile(ctx, skillsRoot, profile, exec.signal)
+      const written = await writeSkillFile(
+        ctx, skillsRoot, skillDirectory(profile.name, corpus.userName), profile, exec.signal,
+      )
       const value: BuildSkillValue = {
         source: corpus.source,
         userID: corpus.userID,

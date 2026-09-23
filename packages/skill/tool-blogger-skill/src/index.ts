@@ -26,7 +26,7 @@ export { applyBloggerTools } from './tools.ts'
 export type { BuildSkillValue, BloggerToolLimits, BloggerToolOptions, HarvestValue } from './tools.ts'
 export { chunkBlocks, digestBlocks, estimateTokens } from './chunk.ts'
 export type { DigestBlock, DigestChunk } from './chunk.ts'
-export { PROCEDURE_MARKER } from './profile.ts'
+export { PROCEDURE_MARKER, skillDirectory } from './profile.ts'
 export { parseCorpus, serializeCorpus } from './corpus.ts'
 export type { BloggerCorpus, BloggerProfile, CorpusPost } from './types.ts'
 

@@ -379,7 +379,7 @@ describe('blogger_build_skill', () => {
       passes: 2,
       notesReused: 0,
     })
-    const path = join(skillsRoot, 'stub-blogger-buy-the-dip', 'SKILL.md')
+    const path = join(skillsRoot, 'stub-blogger-buy-the-dip-Stub-Blogger', 'SKILL.md')
     expect((out.value as { skillPath: string }).skillPath).toBe(path)
     const file = readFileSync(path, 'utf8')
     expect(file.startsWith('---\nname: stub-blogger-buy-the-dip\n')).toBe(true)
@@ -395,7 +395,7 @@ describe('blogger_build_skill', () => {
     expect(out.isError).toBe(false)
     if (out.isError) return
     expect(out.value).toMatchObject({ skillName: 'my-stub-profile' })
-    expect(readFileSync(join(skillsRoot, 'my-stub-profile', 'SKILL.md'), 'utf8')).toContain('my-stub-profile')
+    expect(readFileSync(join(skillsRoot, 'my-stub-profile-Stub-Blogger', 'SKILL.md'), 'utf8')).toContain('my-stub-profile')
   })
 
   it('rejects a skill name outside the skill grammar', async () => {

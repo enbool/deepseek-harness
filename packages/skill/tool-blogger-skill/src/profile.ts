@@ -492,11 +492,30 @@ export function renderSkillFile(profile: BloggerProfile): string {
   ].join('\n')
 }
 
+/** Characters a directory name may not carry: separators, Windows-reserved marks, whitespace, and controls. */
+const UNSAFE_DIRECTORY_CHARS = /[\\/:*?"<>|\s\u0000-\u0008\u000E-\u001F]+/gu
+
 /**
- * Write one profile as `<skillsRoot>/<name>/SKILL.md` plus its evidence portrait.
+ * The directory one skill occupies: the skill name, then the blogger's display
+ * name, so a reader browsing the skill root can tell whose skill it is. The skill
+ * name itself stays grammar-valid kebab-case, which admits no CJK, so the handle
+ * rides in the directory instead.
+ *
+ * @param skillName - the validated kebab-case skill name.
+ * @param displayName - the blogger's display name, when the platform exposes one.
+ * @returns a directory name carrying no path separator.
+ */
+export function skillDirectory(skillName: string, displayName?: string): string {
+  const handle = (displayName ?? '').replace(UNSAFE_DIRECTORY_CHARS, '-').replace(/^[.-]+|[.-]+$/gu, '')
+  return handle.length === 0 ? skillName : `${skillName}-${handle}`
+}
+
+/**
+ * Write one profile as `<skillsRoot>/<directory>/SKILL.md` plus its portrait.
  *
  * @param ctx - context exposing the filesystem service.
  * @param skillsRoot - the configured skill root directory.
+ * @param directory - the directory name the skill occupies.
  * @param profile - the profile to write.
  * @param signal - cancellation signal.
  * @returns the absolute paths written.
@@ -504,12 +523,13 @@ export function renderSkillFile(profile: BloggerProfile): string {
 export async function writeSkillFile(
   ctx: Context,
   skillsRoot: string,
+  directory: string,
   profile: BloggerProfile,
   signal: AbortSignal,
 ): Promise<{ skillPath: string; portraitPath: string }> {
-  const directory = join(skillsRoot, profile.name)
-  const skillPath = join(directory, 'SKILL.md')
-  const portraitPath = join(directory, PORTRAIT_FILE)
+  const target = join(skillsRoot, directory)
+  const skillPath = join(target, 'SKILL.md')
+  const portraitPath = join(target, PORTRAIT_FILE)
   const skillTarget = await ctx.fs.resolve(skillPath, { signal })
   await ctx.fs.writeText(skillTarget, renderSkillFile(profile), undefined, signal)
   const portraitTarget = await ctx.fs.resolve(portraitPath, { signal })

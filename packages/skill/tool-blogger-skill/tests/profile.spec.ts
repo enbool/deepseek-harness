@@ -20,6 +20,7 @@ import {
   parseProcedure,
   renderSkillFile,
   resolveRoute,
+  skillDirectory,
   writeSkillFile,
 } from '../src/profile.ts'
 import type { BloggerDistillRequestEventData, DistillSession } from '../src/profile.ts'
@@ -376,21 +377,39 @@ describe('distillProfile', () => {
   })
 })
 
+describe('skillDirectory', () => {
+  it('appends the blogger display name so the root shows whose skill it is', () => {
+    expect(skillDirectory('tgb-134434', '炒股养家')).toBe('tgb-134434-炒股养家')
+  })
+
+  it('falls back to the skill name when the platform exposes no display name', () => {
+    expect(skillDirectory('tgb-134434', undefined)).toBe('tgb-134434')
+  })
+
+  it('replaces any character a directory name may not carry', () => {
+    expect(skillDirectory('tgb-134434', 'Stub / Blogger: "quoted"?')).toBe('tgb-134434-Stub-Blogger-quoted')
+  })
+
+  it('falls back to the skill name when sanitizing leaves nothing', () => {
+    expect(skillDirectory('tgb-134434', '   ')).toBe('tgb-134434')
+  })
+})
+
 describe('writeSkillFile', () => {
-  it('writes the procedure and its evidence portrait under the name directory', async () => {
+  it('writes the procedure and its portrait under the given directory', async () => {
     const root = tempRoot('blogger-skill')
     try {
       const ctx = new Context()
       await ctx.plugin(LocalFileSystem)
-      const written = await writeSkillFile(ctx, root.path, {
+      const written = await writeSkillFile(ctx, root.path, 'tgb-134434-炒股养家', {
         name: 'stub-blogger',
         description: 'A stub.',
         skill: '- Act.',
         portrait: '# Portrait',
       }, testSignal)
 
-      expect(written.skillPath).toBe(join(root.path, 'stub-blogger', 'SKILL.md'))
-      expect(written.portraitPath).toBe(join(root.path, 'stub-blogger', 'portrait.md'))
+      expect(written.skillPath).toBe(join(root.path, 'tgb-134434-炒股养家', 'SKILL.md'))
+      expect(written.portraitPath).toBe(join(root.path, 'tgb-134434-炒股养家', 'portrait.md'))
       await expect(ctx.fs.readText(await ctx.fs.resolve(written.skillPath))).resolves.toContain('name: stub-blogger')
       await expect(ctx.fs.readText(await ctx.fs.resolve(written.portraitPath))).resolves.toBe('# Portrait\n')
     } finally {
