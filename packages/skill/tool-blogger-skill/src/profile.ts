@@ -101,62 +101,66 @@ declare module '@deepseek-ai/dsh-session/types' {
 
 /**
  * The line separating the response's JSON header from the operating procedure.
- * Long markdown cannot survive JSON string escaping, so the two documents travel
- * as plain text between markers and only the short header is JSON.
+ * Long markdown cannot survive JSON string escaping, so the procedure travels as
+ * plain text after this marker and only the short header is JSON.
  */
 export const PROCEDURE_MARKER = '<<<DSH:PROCEDURE>>>'
 
-/** The line separating the operating procedure from the evidence portrait. */
-export const EVIDENCE_MARKER = '<<<DSH:EVIDENCE>>>'
-
 /**
- * The distillation instructions. They state the two documents the answer must
- * carry, the evidence each may rest on, and the response format the caller
- * parses: the operating procedure is the product, and the portrait is the
- * evidence a reader consults when they doubt a rule.
+ * The procedure instructions. This is the product, so it is the only document
+ * this request asks for: two documents in one answer overran the output-token cap
+ * and lost the whole answer.
  */
 export const DISTILL_SYSTEM_PROMPT = [
-  'You turn one investor\'s published writing into a skill another trader can follow.',
-  'Work only from the supplied corpus: posts and replies that this investor wrote.',
-  'Answer with two documents.',
-
-  'The first is `skill`, the operating procedure, and it is the product.',
-  'Write it in the imperative: every line tells the reader what to do, check, or refuse.',
+  'You turn one investor\'s published writing into an operating procedure another trader can follow.',
+  'Work only from the supplied evidence.',
+  'Write the procedure in the imperative: every line tells the reader what to do, check, or refuse.',
   'State each rule as a condition and its action together, so a reader can act without interpreting prose.',
-  'Cover, in this order, and omit a section only when the corpus is genuinely silent on it:',
+  'Cover, in this order, and omit a section only when the evidence is genuinely silent on it:',
   'when this method applies and when it does not; the decision spine as one short chain;',
   'the judgement rules; execution, meaning entries, additions, reductions, and exits, each with its trigger;',
   'position sizing; refusals and failure modes; and a short pre-trade checklist of answerable questions.',
-  'Ground every rule in behaviour repeated across the corpus; drop anything one passage alone supports,',
-  'and never invent a rule, a threshold, a number, or a checklist item the corpus does not support.',
+  'Ground every rule in behaviour repeated across the evidence; drop anything one passage alone supports,',
+  'and never invent a rule, a threshold, a number, or a checklist item the evidence does not support.',
   'Leave out biography, praise, narrative, dates, decorative stock names, and quotes kept only because they sound good.',
   'A stock name survives only when the name itself carries the rule.',
-  'Keep the whole operating procedure within about 150 lines of markdown, and the checklist within ten items.',
-
-  'The second is the evidence portrait: who this investor is, the worldview behind the method,',
-  'the recurring arguments, and the verbatim quotes, dates, and cases that license the rules above.',
-  'It is the reference a reader consults when they doubt a rule.',
-  'Keep it within about 250 lines, citing the strongest evidence rather than every instance.',
-
-  'Both documents are written in the language the investor writes in, headings included.',
-  'Answer in exactly three parts and nothing else.',
+  'Keep the whole procedure within about 150 lines of markdown, and the checklist within ten items.',
+  'Write it in the language the investor writes in, headings included.',
+  'Answer in exactly two parts and nothing else.',
   'First, one JSON object on its own line holding only "name" and "description":',
   'name is a lower-case kebab-case skill name, and description is one sentence of at most 500 characters saying when a reader should load this skill.',
-  `Then, on its own line, ${PROCEDURE_MARKER}, followed by the operating procedure markdown.`,
-  `Then, on its own line, ${EVIDENCE_MARKER}, followed by the evidence portrait markdown.`,
-  'Write both documents as plain markdown: never wrap either in a code fence, never escape it as a JSON string,',
-  'and never repeat the JSON object after the markers.',
+  `Then, on its own line, ${PROCEDURE_MARKER}, followed by the procedure markdown.`,
+  'Write the procedure as plain markdown: never wrap it in a code fence, never escape it as a JSON string,',
+  'and never repeat the JSON object after the marker.',
 ].join(' ')
 
-/** The response contract restated with the digest so the instruction survives truncation. */
+/** The procedure response contract, restated so the instruction survives input truncation. */
 const OUTPUT_CONTRACT = [
-  'Answer in exactly three parts and nothing else.',
+  'Answer in exactly two parts and nothing else.',
   '{"name": "<kebab-case>", "description": "<one sentence>"}',
   PROCEDURE_MARKER,
   '<operating procedure markdown, no code fence>',
-  EVIDENCE_MARKER,
-  '<evidence portrait markdown, no code fence>',
 ].join('\n')
+
+/**
+ * The portrait instructions. It runs as its own request, after the procedure, so
+ * the evidence it documents is exactly the procedure's rules, and so neither
+ * document competes for one answer's output budget.
+ */
+export const PORTRAIT_SYSTEM_PROMPT = [
+  'You document the evidence behind one investor\'s operating procedure.',
+  'Work only from the supplied evidence; never add a rule the procedure does not carry.',
+  'Write the evidence portrait: who this investor is, the worldview behind the method, the recurring arguments,',
+  'and for each rule of the procedure the verbatim quotes, dates, and cases that license it.',
+  'The portrait is what a reader consults when they doubt a rule, so cite the strongest evidence',
+  'rather than every instance, and keep the quotes verbatim rather than paraphrasing them.',
+  'Leave out praise and narrative, and never invent a quote, a date, or a case.',
+  'Write it in the language the investor writes in, headings included, within about 250 lines.',
+  'Answer with the portrait markdown and nothing else: no preamble and no code fence.',
+].join(' ')
+
+/** The portrait response contract, restated so the instruction survives input truncation. */
+const PORTRAIT_CONTRACT = 'Answer with the portrait markdown and nothing else: no preamble and no code fence.'
 
 /** The portrait file written beside `SKILL.md`, holding the evidence behind the rules. */
 export const PORTRAIT_FILE = 'portrait.md'
@@ -249,8 +253,16 @@ export async function distillProfile(
       BLOGGER_EVIDENCE_TOO_LARGE,
     )
   }
-  const answer = await callModel(ctx, limits, request, DISTILL_SYSTEM_PROMPT, merge)
-  return { profile: parseProfile(answer), evidenceChars, passes: passes + 1, notesReused }
+  const procedure = parseProcedure(await callModel(ctx, limits, request, DISTILL_SYSTEM_PROMPT, merge))
+  const portraitPrompt = `${merge}\n\n--- operating procedure ---\n\n${procedure.skill}\n\n${PORTRAIT_CONTRACT}`
+  if (estimateTokens(portraitPrompt) > limits.maxPromptTokens) {
+    throw new BloggerSkillError(
+      `the evidence notes and the procedure exceed the ${limits.maxPromptTokens}-token portrait budget; raise maxPromptTokens or narrow the harvest`,
+      BLOGGER_EVIDENCE_TOO_LARGE,
+    )
+  }
+  const portrait = parsePortrait(await callModel(ctx, limits, request, PORTRAIT_SYSTEM_PROMPT, portraitPrompt))
+  return { profile: { ...procedure, portrait }, evidenceChars, passes: passes + 2, notesReused }
 }
 
 /**
@@ -372,30 +384,35 @@ function mergeUserMessage(notes: readonly string[], fromNotes: boolean): string 
 }
 
 /**
- * Parse the distillation answer into one profile: a short JSON header holding the
- * name and description, then the operating procedure and the evidence portrait as
- * plain markdown between {@link PROCEDURE_MARKER} and {@link EVIDENCE_MARKER}.
- * Only the header is JSON, because the two documents are far too long to survive
- * JSON string escaping.
+ * Parse the procedure answer: a short JSON header holding the name and
+ * description, then the procedure as plain markdown after {@link PROCEDURE_MARKER}.
+ * Only the header is JSON, because the procedure is far too long to survive JSON
+ * string escaping.
  *
  * @param answer - the model's complete text answer.
- * @returns the validated profile.
+ * @returns the validated name, description, and procedure.
  */
-export function parseProfile(answer: string): BloggerProfile {
+export function parseProcedure(answer: string): Omit<BloggerProfile, 'portrait'> {
   const header = parseHeader(answer)
   const procedureAt = answer.indexOf(PROCEDURE_MARKER, header.end)
   if (procedureAt === -1) {
     throw invalidProfile(`the answer carried no ${PROCEDURE_MARKER} line`, answer)
   }
-  const evidenceAt = answer.indexOf(EVIDENCE_MARKER, procedureAt + PROCEDURE_MARKER.length)
-  if (evidenceAt === -1) {
-    throw invalidProfile(`the answer carried no ${EVIDENCE_MARKER} line`, answer)
-  }
-  const skill = unfence(answer.slice(procedureAt + PROCEDURE_MARKER.length, evidenceAt))
-  const portrait = unfence(answer.slice(evidenceAt + EVIDENCE_MARKER.length))
+  const skill = unfence(answer.slice(procedureAt + PROCEDURE_MARKER.length))
   if (skill.length === 0) throw invalidProfile('the answer carried an empty operating procedure', answer)
+  return { name: header.name, description: header.description, skill }
+}
+
+/**
+ * Parse the portrait answer, which is the whole response as plain markdown.
+ *
+ * @param answer - the model's complete text answer.
+ * @returns the portrait markdown.
+ */
+export function parsePortrait(answer: string): string {
+  const portrait = unfence(answer)
   if (portrait.length === 0) throw invalidProfile('the answer carried an empty evidence portrait', answer)
-  return { name: header.name, description: header.description, skill, portrait }
+  return portrait
 }
 
 /**

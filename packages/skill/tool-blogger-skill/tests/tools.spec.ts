@@ -376,7 +376,7 @@ describe('blogger_build_skill', () => {
       posts: 2,
       postsWithBody: 2,
       replies: 2,
-      passes: 1,
+      passes: 2,
       notesReused: 0,
     })
     const path = join(skillsRoot, 'stub-blogger-buy-the-dip', 'SKILL.md')
@@ -458,8 +458,8 @@ describe('blogger_build_skill', () => {
     expect(first.isError).toBe(false)
     expect(second.isError).toBe(false)
     if (first.isError || second.isError) return
-    expect((first.value as { passes: number }).passes).toBeGreaterThan(1)
-    expect(second.value).toMatchObject({ passes: 1 })
+    expect((first.value as { passes: number }).passes).toBeGreaterThan(2)
+    expect(second.value).toMatchObject({ passes: 2 })
     expect((second.value as { notesReused: number }).notesReused).toBeGreaterThan(0)
     expect(second.content[0]).toMatchObject({
       text: expect.stringContaining('window note(s) reused from') as string,

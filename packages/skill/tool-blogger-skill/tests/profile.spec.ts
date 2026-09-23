@@ -15,7 +15,9 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   DISTILL_SYSTEM_PROMPT,
   distillProfile,
-  parseProfile,
+  PORTRAIT_SYSTEM_PROMPT,
+  parsePortrait,
+  parseProcedure,
   renderSkillFile,
   resolveRoute,
   writeSkillFile,
@@ -102,47 +104,57 @@ describe('resolveRoute', () => {
   })
 })
 
-describe('parseProfile', () => {
+describe('parseProcedure', () => {
   it('parses a plain JSON answer', () => {
-    expect(parseProfile(profileAnswer())).toEqual({
+    expect(parseProcedure(profileAnswer())).toEqual({
       name: 'stub-blogger-buy-the-dip',
       description: 'Consult when judging a stub blogger\'s dip-buying rules.',
       skill: '## When this applies\n\n- In a falling market with volume.\n\n## Rules\n\n- Wait for volume before buying.',
-      portrait: '## Worldview\n\n- The blogger buys dips on volume.',
     })
-  })
-  it('parses an answer wrapped in prose and a code fence', () => {
-    expect(parseProfile(`Here it is:\n\`\`\`json\n${profileAnswer()}\n\`\`\`\n`).name).toBe('stub-blogger-buy-the-dip')
   })
 
-  it('strips a fence the model wrapped around a document anyway', () => {
-    const answer = profileAnswer({
-      skill: '```markdown\n## Rules\n\n- Act.\n```',
-      portrait: '```markdown\n## Worldview\n\n- Evidence.\n```',
-    })
-    expect(parseProfile(answer)).toMatchObject({ skill: '## Rules\n\n- Act.', portrait: '## Worldview\n\n- Evidence.' })
+  it('parses an answer wrapped in prose and a code fence', () => {
+    expect(parseProcedure(`Here it is:\n\`\`\`json\n${profileAnswer()}\n\`\`\`\n`).name).toBe('stub-blogger-buy-the-dip')
+  })
+
+  it('strips a fence the model wrapped around the procedure anyway', () => {
+    expect(parseProcedure(profileAnswer({ skill: '```markdown\n## Rules\n\n- Act.\n```' })).skill)
+      .toBe('## Rules\n\n- Act.')
   })
 
   it.each([
     ['no JSON header at all', 'I cannot answer that.', /did not begin with the JSON header object/],
     ['an unterminated header', '{"name":"x"', /did not begin with the JSON header object/],
-    ['an invalid header', '{not json}\n<<<DSH:PROCEDURE>>>\nx\n<<<DSH:EVIDENCE>>>\ny', /JSON header did not parse/],
+    ['an invalid header', '{not json}\n<<<DSH:PROCEDURE>>>\nx', /JSON header did not parse/],
     ['a non-kebab-case name', profileAnswer({ name: 'Stub Blogger' }), /kebab-case skill name/],
     ['a missing name', profileAnswer({ name: 5 }), /kebab-case skill name/],
     ['an empty description', profileAnswer({ description: '   ' }), /header carried no "description" string/],
     ['a non-string description', profileAnswer({ description: 5 }), /header carried no "description" string/],
     ['no procedure marker', '{"name":"stub-blogger","description":"d"}\nno marker here', /carried no <<<DSH:PROCEDURE>>> line/],
-    ['no evidence marker', '{"name":"stub-blogger","description":"d"}\n<<<DSH:PROCEDURE>>>\nbody', /carried no <<<DSH:EVIDENCE>>> line/],
     ['an empty procedure', profileAnswer({ skill: '   ' }), /empty operating procedure/],
-    ['an empty portrait', profileAnswer({ portrait: '   ' }), /empty evidence portrait/],
   ])('rejects %s', (_label, answer, expected) => {
-    expect(() => parseProfile(answer))
+    expect(() => parseProcedure(answer))
       .toThrow(expect.objectContaining({ code: 'BLOGGER_PROFILE_INVALID', message: expect.stringMatching(expected) as string }))
   })
 
   it('quotes the answer that failed so the model can see what it wrote', () => {
-    expect(() => parseProfile('I cannot answer that.'))
+    expect(() => parseProcedure('I cannot answer that.'))
       .toThrow(expect.objectContaining({ message: expect.stringContaining('the answer began: "I cannot answer that."') as string }))
+  })
+})
+
+describe('parsePortrait', () => {
+  it('takes the whole answer as the portrait', () => {
+    expect(parsePortrait('# Worldview\n\n- Evidence.')).toBe('# Worldview\n\n- Evidence.')
+  })
+
+  it('strips a fence the model wrapped around the portrait anyway', () => {
+    expect(parsePortrait('```markdown\n# Worldview\n```')).toBe('# Worldview')
+  })
+
+  it('rejects an empty portrait', () => {
+    expect(() => parsePortrait('   '))
+      .toThrow(expect.objectContaining({ code: 'BLOGGER_PROFILE_INVALID', message: expect.stringContaining('empty evidence portrait') as string }))
   })
 })
 
@@ -183,10 +195,10 @@ describe('distillProfile', () => {
     })
 
     expect(outcome.profile.name).toBe('stub-blogger-buy-the-dip')
-    expect(outcome.passes).toBe(1)
+    expect(outcome.passes).toBe(2)
     expect(outcome.notesReused).toBe(0)
     expect(outcome.evidenceChars).toBeGreaterThan(0)
-    expect(appended).toHaveLength(1)
+    expect(appended).toHaveLength(2)
     expect(appended[0]).toMatchObject({
       source: 'stub',
       userID: '905478',
@@ -222,7 +234,7 @@ describe('distillProfile', () => {
       corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, notesRoot: '/notes', signal: testSignal,
     })
 
-    expect(outcome.passes).toBe(1)
+    expect(outcome.passes).toBe(2)
     expect(adapter.requests[0]?.sessionId).toBeUndefined()
   })
 
@@ -255,23 +267,59 @@ describe('distillProfile', () => {
       const first = await distillProfile(ctx, { maxPromptTokens: 400, maxOutputTokens: 4_000 }, request)
 
       expect(first.notesReused).toBe(0)
-      expect(first.passes).toBeGreaterThan(1)
-      // Every window note, then one merge pass.
+      expect(first.passes).toBeGreaterThan(2)
+      // Every window note, then the procedure pass and the portrait pass.
       expect(first.passes).toBe(adapter.requests.length)
-      expect(adapter.requests.at(-1)?.system).toBe(DISTILL_SYSTEM_PROMPT)
+      expect(adapter.requests.at(-1)?.system).toBe(PORTRAIT_SYSTEM_PROMPT)
 
       const reused = await distillProfile(ctx, { maxPromptTokens: 400, maxOutputTokens: 4_000 }, request)
 
-      expect(reused.passes).toBe(1)
-      expect(reused.notesReused).toBe(first.passes - 1)
+      expect(reused.passes).toBe(2)
+      expect(reused.notesReused).toBe(first.passes - 2)
 
       // An empty stored note is not evidence, so that window is read again.
       const notes = readdirSync(join(root.path, 'stub-905478'))
       writeFileSync(join(root.path, 'stub-905478', notes[0]!), '')
       const emptied = await distillProfile(ctx, { maxPromptTokens: 400, maxOutputTokens: 4_000 }, request)
 
-      expect(emptied.notesReused).toBe(first.passes - 2)
-      expect(emptied.passes).toBe(2)
+      expect(emptied.notesReused).toBe(first.passes - 3)
+      expect(emptied.passes).toBe(3)
+    } finally {
+      root.remove()
+    }
+  })
+
+  it('fails loud when the procedure pushes the portrait request past the budget', async () => {
+    const root = tempRoot('blogger-notes')
+    try {
+      const ctx = new Context()
+      await ctx.plugin(LocalFileSystem)
+      await ctx.plugin(LlmRuntime)
+      ctx.llm.registerAdapter(['stub-provider'], new RoutingAdapter(
+        undefined,
+        profileAnswer({ skill: '追涨杀跌'.repeat(2000) }),
+      ))
+      const large: BloggerCorpus = {
+        ...CORPUS,
+        replies: Array.from({ length: 20 }, (_, index) => ({
+          id: `other/${index}`,
+          url: `https://stub.example/a/other/${index}`,
+          topicTitle: 'Someone else',
+          topicUrl: 'https://stub.example/a/other',
+          repliedAt: '2026-01-03 09:00',
+          body: '追涨杀跌'.repeat(20),
+        })),
+      }
+
+      await expect(distillProfile(ctx, { maxPromptTokens: 900, maxOutputTokens: 4_000 }, {
+        corpus: large,
+        route: { provider: 'stub-provider', model: 'stub-model' },
+        notesRoot: root.path,
+        signal: testSignal,
+      })).rejects.toThrow(expect.objectContaining({
+        code: 'BLOGGER_EVIDENCE_TOO_LARGE',
+        message: expect.stringContaining('portrait budget') as string,
+      }))
     } finally {
       root.remove()
     }

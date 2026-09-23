@@ -18,7 +18,7 @@ import type {
 } from '@deepseek-ai/dsh-blogger'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
-import { EVIDENCE_MARKER, EVIDENCE_SYSTEM_PROMPT, PROCEDURE_MARKER } from '../src/profile.ts'
+import { EVIDENCE_SYSTEM_PROMPT, PORTRAIT_SYSTEM_PROMPT, PROCEDURE_MARKER } from '../src/profile.ts'
 
 /** Build a text-only response stream. */
 export function textResponse(text: string): StreamChunk[] {
@@ -56,6 +56,7 @@ export class RoutingAdapter extends LlmAdapter {
   constructor(
     private readonly evidence = '### 情绪周期\n- 追涨杀跌（2011-04-13）',
     private readonly profile = profileAnswer(),
+    private readonly portrait = PORTRAIT_ANSWER,
   ) {
     super()
   }
@@ -66,7 +67,9 @@ export class RoutingAdapter extends LlmAdapter {
 
   override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push(options)
-    const answer = options.system === EVIDENCE_SYSTEM_PROMPT ? this.evidence : this.profile
+    const answer = options.system === EVIDENCE_SYSTEM_PROMPT
+      ? this.evidence
+      : options.system === PORTRAIT_SYSTEM_PROMPT ? this.portrait : this.profile
     for (const chunk of textResponse(answer)) yield chunk
   }
 }
@@ -158,9 +161,8 @@ export function profileAnswer(overrides: {
   name?: unknown
   description?: unknown
   skill?: string
-  portrait?: string
 } = {}): string {
-  const { skill, portrait, ...header } = overrides
+  const { skill, ...header } = overrides
   return [
     JSON.stringify({
       name: 'stub-blogger-buy-the-dip',
@@ -169,10 +171,11 @@ export function profileAnswer(overrides: {
     }),
     PROCEDURE_MARKER,
     skill ?? '## When this applies\n\n- In a falling market with volume.\n\n## Rules\n\n- Wait for volume before buying.',
-    EVIDENCE_MARKER,
-    portrait ?? '## Worldview\n\n- The blogger buys dips on volume.',
   ].join('\n')
 }
+
+/** The portrait markdown one scripted portrait pass answers with. */
+export const PORTRAIT_ANSWER = '## Worldview\n\n- The blogger buys dips on volume.'
 
 /** One temp directory removed by the caller. */
 export interface TempRoot {
