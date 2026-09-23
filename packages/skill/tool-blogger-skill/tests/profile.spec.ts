@@ -178,7 +178,7 @@ describe('renderSkillFile', () => {
       '',
       '---',
       '',
-      'Evidence, quotes, and cases behind these rules: [`portrait.md`](portrait.md).',
+      'The investor behind these rules: [`portrait.md`](portrait.md).',
       '',
     ].join('\n'))
   })

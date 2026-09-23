@@ -144,17 +144,17 @@ const OUTPUT_CONTRACT = [
 
 /**
  * The portrait instructions. It runs as its own request, after the procedure, so
- * the evidence it documents is exactly the procedure's rules, and so neither
+ * the investor it describes is the one the procedure came from, and so neither
  * document competes for one answer's output budget.
  */
 export const PORTRAIT_SYSTEM_PROMPT = [
-  'You document the evidence behind one investor\'s operating procedure.',
-  'Work only from the supplied evidence; never add a rule the procedure does not carry.',
-  'Write the evidence portrait: who this investor is, the worldview behind the method, the recurring arguments,',
-  'and for each rule of the procedure the verbatim quotes, dates, and cases that license it.',
-  'The portrait is what a reader consults when they doubt a rule, so cite the strongest evidence',
-  'rather than every instance, and keep the quotes verbatim rather than paraphrasing them.',
-  'Leave out praise and narrative, and never invent a quote, a date, or a case.',
+  'You write the portrait of one investor, for a reader who follows the operating procedure distilled from the same writing.',
+  'Work only from the supplied evidence; never add a fact or a rule it does not carry.',
+  'Describe the investor as a trader: the worldview behind the method, the arguments they return to,',
+  'the habits they keep, the mistakes they admit to, and the voice they argue in.',
+  'Quote them verbatim where their own words carry the idea, but write prose about the person.',
+  'Name no post, no thread, no date, and no source, and never mention how the writing was collected or how much of it there was.',
+  'Leave out praise and narrative, and never invent a quote, a fact, or a case.',
   'Write it in the language the investor writes in, headings included, within about 120 lines.',
   'Answer with the portrait markdown and nothing else: no preamble and no code fence.',
 ].join(' ')
@@ -162,7 +162,7 @@ export const PORTRAIT_SYSTEM_PROMPT = [
 /** The portrait response contract, restated so the instruction survives input truncation. */
 const PORTRAIT_CONTRACT = 'Answer with the portrait markdown and nothing else: no preamble and no code fence.'
 
-/** The portrait file written beside `SKILL.md`, holding the evidence behind the rules. */
+/** The portrait file written beside `SKILL.md`, describing the investor behind the rules. */
 export const PORTRAIT_FILE = 'portrait.md'
 
 /**
@@ -487,7 +487,7 @@ export function renderSkillFile(profile: BloggerProfile): string {
     '',
     '---',
     '',
-    `Evidence, quotes, and cases behind these rules: [\`${PORTRAIT_FILE}\`](${PORTRAIT_FILE}).`,
+    `The investor behind these rules: [\`${PORTRAIT_FILE}\`](${PORTRAIT_FILE}).`,
     '',
   ].join('\n')
 }
