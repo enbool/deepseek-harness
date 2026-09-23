@@ -18,17 +18,21 @@ export {
   BLOGGER_CORPUS_INVALID,
   BLOGGER_CORPUS_MISSING,
   BLOGGER_DISTILL_ROUTE_UNSET,
+  BLOGGER_DOCUMENT_INVALID,
   BLOGGER_EVIDENCE_TOO_LARGE,
   BLOGGER_PROFILE_INVALID,
   BloggerSkillError,
 } from './errors.ts'
-export { applyBloggerTools } from './tools.ts'
-export type { BuildSkillValue, BloggerToolLimits, BloggerToolOptions, HarvestValue } from './tools.ts'
+export { applyBloggerTools, formatIngest, LOCAL_SOURCE } from './tools.ts'
+export type { BuildSkillValue, BloggerToolLimits, BloggerToolOptions, HarvestValue, IngestValue } from './tools.ts'
 export { chunkBlocks, digestBlocks, estimateTokens } from './chunk.ts'
 export type { DigestBlock, DigestChunk } from './chunk.ts'
 export { PROCEDURE_MARKER, skillDirectory } from './profile.ts'
-export { parseCorpus, serializeCorpus } from './corpus.ts'
-export type { BloggerCorpus, BloggerProfile, CorpusPost } from './types.ts'
+export { corpusPath, mergeDocuments, mergePosts, mergeReplies, parseCorpus, serializeCorpus, BloggerCorpusStore } from './corpus.ts'
+export type { CorpusBounds, HarvestedCorpus, IngestedCorpus, MergePosition } from './corpus.ts'
+export { documentPost, documentReply, parseDocument, UNKNOWN_DATE } from './documents.ts'
+export type { DocumentKind, IngestedDocument } from './documents.ts'
+export type { BloggerCorpus, BloggerProfile, CorpusOrigin, CorpusPost, CorpusReply } from './types.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-blogger-skill'

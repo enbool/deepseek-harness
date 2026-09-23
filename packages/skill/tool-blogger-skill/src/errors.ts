@@ -28,6 +28,9 @@ export const BLOGGER_CONFIG_INVALID = 'BLOGGER_CONFIG_INVALID'
 /** `BLOGGER_EVIDENCE_TOO_LARGE` — the merged window notes exceed one request's token budget. */
 export const BLOGGER_EVIDENCE_TOO_LARGE = 'BLOGGER_EVIDENCE_TOO_LARGE'
 
+/** `BLOGGER_DOCUMENT_INVALID` — an offline document is empty or declares a kind that does not exist. */
+export const BLOGGER_DOCUMENT_INVALID = 'BLOGGER_DOCUMENT_INVALID'
+
 /** One blogger-harvest or distillation failure, carrying one of the module's stable codes. */
 export class BloggerSkillError extends HarnessError {
   /**

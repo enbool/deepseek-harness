@@ -3399,7 +3399,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/tool-blogger-skill/src/index.ts:73`](../packages/skill/tool-blogger-skill/src/index.ts)
+Source: [`packages/skill/tool-blogger-skill/src/index.ts:77`](../packages/skill/tool-blogger-skill/src/index.ts)
 
 <a id="deepseek-aidsh-tool-fs"></a>
 

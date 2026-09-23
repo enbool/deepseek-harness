@@ -50,7 +50,7 @@
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
 | `@deepseek-ai/dsh-tool-tgb` | `tgb_get_follows`、`tgb_get_home_sections`、`tgb_get_replies`、`tgb_get_topic_content`、`tgb_get_topics` | `ctx.tools`、`ctx.credentials` | `tool/call`、`tool/result` | - | - |
-| `@deepseek-ai/dsh-tool-blogger-skill` | `blogger_build_skill`、`blogger_harvest` | `ctx.tools`、`ctx.bloggers`、`ctx.llm`、`ctx.fs` | `tool/call`、`tool/result`、`blogger/distill-request`、`配置的 skill 根目录下的一个 SKILL.md` | - | - |
+| `@deepseek-ai/dsh-tool-blogger-skill` | `blogger_build_skill`、`blogger_harvest`、`blogger_ingest_documents` | `ctx.tools`、`ctx.bloggers`、`ctx.llm`、`ctx.fs` | `tool/call`、`tool/result`、`blogger/distill-request`、`配置的 skill 根目录下的一个 SKILL.md` | - | - |
 
 <a id="deepseek-aidsh-plugin-manager"></a>
 
@@ -2735,6 +2735,47 @@ web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可�
   },
   "required": [
     "user"
+  ]
+}
+```
+
+来源：[`packages/skill/tool-blogger-skill/src/index.ts`](../packages/skill/tool-blogger-skill/src/index.ts)
+
+### `blogger_ingest_documents`
+
+把本地 Markdown 文档并入某位博主的语料。用于平台已删除或从未收录的材料：传入与 blogger_harvest 相同的 user，即可把文档加入平台博主；传入以 local: 开头的引用，则用于没有任何平台历史的博主。每份文档都是 Markdown，可带 YAML frontmatter，用于命名 title、publishedAt、kind、platformId、topicTitle 和 topicUrl。重复摄取未改动的文档会替换其记录，而不是产生重复。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": "string",
+      "description": "The blogger's id or profile page URL on the platform, or a reference such as local:炒股养家 for a blogger with no platform history."
+    },
+    "source": {
+      "type": "string",
+      "description": "Source id, when the reference alone does not select one. Omit to let the reference select its own source."
+    },
+    "userName": {
+      "type": "string",
+      "description": "Display name to store for a blogger the source does not name, such as a blogger reached through a local: reference."
+    },
+    "documents": {
+      "type": "array",
+      "description": "Paths to the markdown documents to read and fold into the corpus.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "kind": {
+      "type": "string",
+      "description": "What a document whose frontmatter names no kind is: post or reply. Defaults to post."
+    }
+  },
+  "required": [
+    "user",
+    "documents"
   ]
 }
 ```

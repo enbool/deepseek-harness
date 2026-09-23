@@ -1,5 +1,5 @@
 ---
-description: "Two model-facing tools that harvest one platform blogger's posts, bodies, and replies into a local corpus through ctx.bloggers, then distill that corpus through ctx.llm into a loadable SKILL.md."
+description: "Three model-facing tools that build one platform blogger's corpus through ctx.bloggers — by harvesting posts, bodies, and replies or by folding in local markdown documents — then distill it through ctx.llm into a loadable SKILL.md."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-tool-blogger-skill` turns one forum blogger into a reusable skill. `blogger_harvest` takes a blogger's id or profile-page URL, resolves it against `ctx.bloggers`, collects that blogger's posts, post bodies, and replies, and merges them into a durable per-blogger corpus. `blogger_build_skill` reads that corpus and writes two files under the configured skill root: `SKILL.md`, an operating procedure written in the imperative so another trader can act on it, and `portrait.md`, a portrait of the trader behind it — their worldview, the arguments they return to, and their own words. Both tools are read-only over the platform; only the corpus and skill files are written locally.
+`dsh-tool-blogger-skill` turns one forum blogger into a reusable skill. `blogger_harvest` resolves a blogger's id or profile-page URL against `ctx.bloggers` and merges their posts, post bodies, and replies into a durable per-blogger corpus; `blogger_ingest_documents` folds local markdown documents into the same corpus. `blogger_build_skill` reads that corpus and writes two files under the configured skill root: `SKILL.md`, an imperative operating procedure another trader can act on, and `portrait.md`, a portrait of the trader behind it — their worldview, the arguments they return to, and their own words. Nothing writes to a platform; only the corpus and skill files are written locally.
 
 ## Table of Contents
 
@@ -57,14 +57,17 @@ Choose this package when a user names a 大V blogger and wants that blogger's re
 | `maxOutputChars` | `20000` | Cap on one complete rendered tool output |
 | `timeoutMs` | `600000` | Cooperative tool-call timeout budget (ms) |
 
-### The two tools
+### The tools
 
 - `blogger_harvest` — resolve `user` (or `user` plus an explicit `source`) and collect one page window. `postStartPage` and `replyStartPage` choose where each list begins, so a second call reaches pages the first could not. It merges into the stored corpus, keeps a body an earlier harvest already fetched, and returns the corpus totals, the per-call additions, and the pagination facts including the page to pass next.
+- `blogger_ingest_documents` — fold local markdown documents into the same corpus. `user` names the blogger, `source` defaults to the blogger's platform source when one resolves, `userName` supplies a display name, `documents` lists the file paths, and `kind` (default `post`) says what a document that names no kind is. Use it when the platform deleted posts the reader kept offline copies of, or when a blogger has no platform posts at all. A blogger the platform never carried takes the built-in `local` source, which gives that offline-only identity a `source` of `local` so `blogger_build_skill` resolves it through the same `ctx.bloggers` path as a platform source; `blogger_harvest` against `local` has no platform history to read.
 - `blogger_build_skill` — read that corpus and distill it into two files. A corpus that fits `maxPromptTokens` is read in one pass; a larger one is read window by window, each window writing an evidence note under `<corpusRoot>/notes/<source>-<userID>/`, and two merge passes turn the notes into the skill. An unchanged window's note is reused instead of regenerated. `SKILL.md` is the product: an imperative operating procedure covering when the method applies, the decision spine, the judgement rules, execution, position sizing, refusals, and a pre-trade checklist. `portrait.md` beside it describes the trader those rules came from — the worldview, the recurring arguments, the mistakes admitted to — quoting them without naming a post, a date, or a source, and `SKILL.md` links to it. `skillName` overrides the model's proposed name; the files land under `<skillsRoot>/<skillName>-<display name>/`, so the skill root shows whose skill each directory is.
 
 ### The corpus
 
 One JSON file per blogger, named `<source>-<userID>.json` under `corpusRoot`. Records stay in platform list order, newest first, whichever window a harvest read: a window starting at the platform's first page is merged ahead of the stored records, and a window starting past it continues after them. Posts keep the newest copy and any body an earlier harvest fetched; replies deduplicate by id; both caps apply to the newest end, so paginating deeper never evicts the newest material. A file that no longer matches the record grammar fails loud with `BLOGGER_CORPUS_INVALID` rather than yielding a half-trusted corpus.
+
+Every record carries an `origin` of `platform` for a harvest or `offline` for an ingested document, and a record written before the field existed reads as a platform record. The `maxCorpusPosts` and `maxCorpusReplies` bounds cover platform records only, because an offline record is an explicit intake of a document the user chose rather than automatic growth. A document's record id derives from its path, so re-ingesting an unchanged document replaces its record instead of appending a copy; a frontmatter `platformId` claims a platform record's id, so an offline copy of a post the platform still carries replaces that platform record rather than double-counting it.
 
 ### Failures and recovery
 
@@ -93,7 +96,7 @@ One JSON file per blogger, named `<source>-<userID>.json` under `corpusRoot`. Re
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: config schema and route pairing validation |
-| [`src/tools.ts`](src/tools.ts) | The two model-facing schemas, orchestration, rendering, and root resolution |
+| [`src/tools.ts`](src/tools.ts) | The model-facing schemas, orchestration, rendering, and root resolution |
 | [`src/corpus.ts`](src/corpus.ts) | The corpus record grammar, the merge, and the `ctx.fs` access |
 | [`src/profile.ts`](src/profile.ts) | The digest, the auxiliary LLM request and its session record, the answer grammar, and the `SKILL.md` writer |
 | [`src/errors.ts`](src/errors.ts) | The stable error codes |
@@ -104,7 +107,7 @@ One JSON file per blogger, named `<source>-<userID>.json` under `corpusRoot`. Re
 
 ### Distillation flow
 
-`blogger_build_skill` renders the corpus as ordered blocks, groups them into windows under `maxPromptTokens`, reads each window into an evidence note, and then makes two merge passes: one writes the operating procedure, and one writes the portrait of the trader those rules came from. Splitting the merge keeps neither document competing for one answer's output budget, which is what overran the cap when a single request carried both. Every request is hand-built rather than loop-built, so it carries its own system prompt, is deep-frozen, and is never marked as a loop request. The procedure answer carries a one-object JSON header holding the name and description, then the procedure as plain markdown after a marker line — a document that long cannot survive JSON string escaping — and the portrait answer is plain markdown throughout. A failed parse reports the first 300 characters the model actually wrote, so the next call can correct it.
+`blogger_build_skill` renders the corpus — platform records and offline documents alike — as ordered blocks, groups them into windows under `maxPromptTokens`, reads each window into an evidence note, and then makes two merge passes: one writes the operating procedure, and one writes the portrait of the trader those rules came from. Splitting the merge keeps neither document competing for one answer's output budget, which is what overran the cap when a single request carried both. Every request is hand-built rather than loop-built, so it carries its own system prompt, is deep-frozen, and is never marked as a loop request. The procedure answer carries a one-object JSON header holding the name and description, then the procedure as plain markdown after a marker line — a document that long cannot survive JSON string escaping — and the portrait answer is plain markdown throughout. A failed parse reports the first 300 characters the model actually wrote, so the next call can correct it. A record larger than the request budget becomes several consecutive blocks split at paragraph boundaries, so only a single paragraph larger than a whole request is hard-sliced.
 
 </details>
 
@@ -126,11 +129,11 @@ One JSON file per blogger, named `<source>-<userID>.json` under `corpusRoot`. Re
 
 #### What the model sees
 
-Two tools: `blogger_harvest` and `blogger_build_skill`. `blogger_harvest` takes the blogger reference (`user`, plus an optional `source`), where each list starts (`postStartPage`, `replyStartPage`), how far each reads (`postPages`, `replyPages`), and a body budget (`maxPosts`). `blogger_build_skill` takes the same reference and an optional `skillName`. Every numeric bound is a deployment setting; the model only ever passes a reference, a start page the tool reported, and the budgets the deployment permits. The complete schemas are in the [generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-blogger-skill).
+Three tools: `blogger_harvest`, `blogger_ingest_documents`, and `blogger_build_skill`. `blogger_harvest` takes the blogger reference (`user`, plus an optional `source`), where each list starts (`postStartPage`, `replyStartPage`), how far each reads (`postPages`, `replyPages`), and a body budget (`maxPosts`). `blogger_ingest_documents` takes the same reference, an optional display name (`userName`), the document paths (`documents`), and the kind a document that names none defaults to (`kind`). `blogger_build_skill` takes the same reference and an optional `skillName`. Every numeric bound is a deployment setting; the model only ever passes a reference, a start page the tool reported, and the budgets the deployment permits. The complete schemas are in the [generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-blogger-skill).
 
 #### Token effect
 
-Fixed schema cost per request for the two tools.
+Fixed schema cost per request for the three tools.
 
 #### KV Cache effect
 
@@ -140,7 +143,7 @@ Prefix-stable while the tools are registered. Plugin lifecycle changes may inval
 
 #### What the model sees
 
-`blogger_harvest` renders a summary line naming the source, user id, display name, post and body counts, and reply count, then a line reporting what this call added and which page window it read, then — while either list still has more — the exact `postStartPage` or `replyStartPage` to pass next, then the corpus path. `blogger_build_skill` renders the skill name, the counts it distilled, the procedure path, the portrait path, the description, and how much evidence it read in how many model requests. A cut output ends with `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)`; failures become `Error: <message>`.
+`blogger_harvest` renders a summary line naming the source, user id, display name, post and body counts, and reply count, then a line reporting what this call added and which page window it read, then — while either list still has more — the exact `postStartPage` or `replyStartPage` to pass next, then the corpus path. `blogger_ingest_documents` renders the blogger identity, how many documents it read, the posts and replies it added, and the corpus path. `blogger_build_skill` renders the skill name, the counts it distilled, the procedure path, the portrait path, the description, and how much evidence it read in how many model requests. A cut output ends with `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)`; failures become `Error: <message>`.
 
 #### Token effect
 
@@ -162,6 +165,8 @@ These limits are current package constraints.
 - **The procedure is only as good as the corpus** — a blogger with a handful of posts yields rules the model cannot ground in repeated behaviour, and the package cannot tell a thin corpus from a rich one. The procedure's own "when this applies" section is the model's honest statement of that; the session log records the evidence size and the pass count.
 - **A corpus beyond one request is read in windows** — the merge pass reads every window note, so a corpus large enough to need very many windows eventually exceeds that budget and fails loud with `BLOGGER_EVIDENCE_TOO_LARGE` rather than sending a truncated request. A hierarchical merge is the deferred fix.
 - **Distillation is single-attempt** — the request is a hand-built `ctx.llm.stream` call, which never retries; a provider failure surfaces to the model, which must call the tool again.
+- **A document's corpus identity is its path** — renaming or moving a document file creates a second record rather than replacing the first, and because offline records are exempt from the retention bounds, the superseded record stays in the corpus.
+- **The intake reads markdown only** — a document is markdown with optional frontmatter, so a saved HTML page, a PDF, or a Word file must be converted to markdown first.
 
 <a id="dev-note"></a>
 ### Dev Note

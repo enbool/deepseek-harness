@@ -46,7 +46,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 | `@deepseek-ai/dsh-tool-tgb` | `tgb_get_follows`, `tgb_get_home_sections`, `tgb_get_replies`, `tgb_get_topic_content`, `tgb_get_topics` | `ctx.tools`, `ctx.credentials` | `tool/call`, `tool/result` | - | - |
-| `@deepseek-ai/dsh-tool-blogger-skill` | `blogger_build_skill`, `blogger_harvest` | `ctx.tools`, `ctx.bloggers`, `ctx.llm`, `ctx.fs` | `tool/call`, `tool/result`, `blogger/distill-request`, `a SKILL.md under the configured skill root` | - | - |
+| `@deepseek-ai/dsh-tool-blogger-skill` | `blogger_build_skill`, `blogger_harvest`, `blogger_ingest_documents` | `ctx.tools`, `ctx.bloggers`, `ctx.llm`, `ctx.fs` | `tool/call`, `tool/result`, `blogger/distill-request`, `a SKILL.md under the configured skill root` | - | - |
 
 <a id="deepseek-aidsh-plugin-manager"></a>
 
@@ -2727,6 +2727,47 @@ Harvest a platform blogger's posts and replies into a local corpus. Pass the blo
   },
   "required": [
     "user"
+  ]
+}
+```
+
+Source: [`packages/skill/tool-blogger-skill/src/index.ts`](../packages/skill/tool-blogger-skill/src/index.ts)
+
+### `blogger_ingest_documents`
+
+Fold local markdown documents into a blogger's corpus. Use it for material the platform deleted or never carried: pass the same user as blogger_harvest to add documents to a platform blogger, or a reference beginning with local: for a blogger with no platform history. Each document is markdown with optional YAML frontmatter naming title, publishedAt, kind, platformId, topicTitle, and topicUrl. Re-ingesting an unchanged document replaces its record instead of duplicating it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": "string",
+      "description": "The blogger's id or profile page URL on the platform, or a reference such as local:炒股养家 for a blogger with no platform history."
+    },
+    "source": {
+      "type": "string",
+      "description": "Source id, when the reference alone does not select one. Omit to let the reference select its own source."
+    },
+    "userName": {
+      "type": "string",
+      "description": "Display name to store for a blogger the source does not name, such as a blogger reached through a local: reference."
+    },
+    "documents": {
+      "type": "array",
+      "description": "Paths to the markdown documents to read and fold into the corpus.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "kind": {
+      "type": "string",
+      "description": "What a document whose frontmatter names no kind is: post or reply. Defaults to post."
+    }
+  },
+  "required": [
+    "user",
+    "documents"
   ]
 }
 ```

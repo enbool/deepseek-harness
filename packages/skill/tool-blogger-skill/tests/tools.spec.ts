@@ -20,7 +20,8 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import * as toolBloggerSkill from '@deepseek-ai/dsh-tool-blogger-skill'
-import { resolveRoot } from '../src/tools.ts'
+import { resolveRoot, formatIngest, LOCAL_SOURCE } from '../src/tools.ts'
+import type { IngestValue } from '../src/tools.ts'
 import type { TempRoot, StubIdentity } from './helpers.ts'
 import { profileAnswer, RoutingAdapter, STUB_POSTS, STUB_REPLIES, StubBloggerSource, tempRoot } from './helpers.ts'
 
@@ -164,9 +165,11 @@ describe('dsh-tool-blogger-skill composition', () => {
     const { ctx } = await mount()
     const harvest = ctx.tools.get('blogger_harvest')
     const build = ctx.tools.get('blogger_build_skill')
+    const ingest = ctx.tools.get('blogger_ingest_documents')
 
     expect(harvest?.isConcurrencySafe?.({ user: USER })).toBe(false)
     expect(build?.isConcurrencySafe?.({ user: USER })).toBe(false)
+    expect(ingest?.isConcurrencySafe?.({ user: USER, documents: [] })).toBe(false)
     expect(harvest?.presentCall?.({ user: USER })).toMatchObject({ card: 'generic', title: `harvest blogger ${USER}` })
     expect(build?.presentCall?.({ user: USER })).toMatchObject({ card: 'generic', title: `build skill for blogger ${USER}` })
   })
@@ -488,5 +491,219 @@ describe('resolveRoot', () => {
   it('resolves a relative root against the session workspace, or the process when there is none', () => {
     expect(resolveRoot(join('.dsh', 'skills'), process.cwd())).toBe(join(process.cwd(), '.dsh', 'skills'))
     expect(resolveRoot('relative-root', undefined)).toBe(join(process.cwd(), 'relative-root'))
+  })
+})
+
+describe('LOCAL_SOURCE', () => {
+  it('matches only its own local: references', () => {
+    expect(LOCAL_SOURCE.matches('local:炒股养家')).toBe(true)
+    expect(LOCAL_SOURCE.matches('  local:someone  ')).toBe(true)
+    expect(LOCAL_SOURCE.matches(USER)).toBe(false)
+    expect(LOCAL_SOURCE.matches('https://stub.example/905478')).toBe(false)
+  })
+
+  it('resolves a trimmed handle and rejects an empty one', async () => {
+    await expect(LOCAL_SOURCE.resolve('local: 炒股养家 ', testSignal)).resolves.toEqual({ source: 'local', userID: '炒股养家' })
+    expect(() => LOCAL_SOURCE.resolve('local:', testSignal))
+      .toThrow(expect.objectContaining({
+        code: 'BLOGGER_DOCUMENT_INVALID',
+        message: expect.stringContaining('needs a handle') as string,
+      }))
+  })
+
+  it('lists nothing and holds no platform posts', async () => {
+    const ref = await LOCAL_SOURCE.resolve('local:炒股养家', testSignal)
+    const request = { pageNo: 1, maxPages: 1, signal: testSignal }
+
+    await expect(LOCAL_SOURCE.listPosts(ref, request))
+      .resolves.toEqual({ items: [], pageNo: 1, pagesFetched: 0, hasMore: false })
+    await expect(LOCAL_SOURCE.listReplies(ref, request))
+      .resolves.toEqual({ items: [], pageNo: 1, pagesFetched: 0, hasMore: false })
+    await expect(LOCAL_SOURCE.fetchPost(ref, 'codeA', testSignal))
+      .rejects.toThrow(expect.objectContaining({
+        code: 'BLOGGER_DOCUMENT_INVALID',
+        message: expect.stringContaining('holds no platform posts') as string,
+      }))
+  })
+})
+
+describe('formatIngest', () => {
+  const VALUE: IngestValue = {
+    source: 'local',
+    userID: 'handle',
+    corpusPath: '/corpora/local-handle.json',
+    documentsRead: 2,
+    postsIngested: 1,
+    repliesIngested: 1,
+    posts: 3,
+    replies: 4,
+    offlinePosts: 1,
+    offlineReplies: 1,
+  }
+
+  it('renders the counts, the corpus path, and the next step', () => {
+    expect(formatIngest(VALUE)).toBe([
+      'Ingested 2 document(s) into local blogger handle: 1 post(s), 1 reply/replies.',
+      'Corpus now holds 3 post(s) and 4 reply/replies, of which 1 and 1 came from documents.',
+      'Corpus: /corpora/local-handle.json',
+      'Run blogger_build_skill to distil it.',
+    ].join('\n'))
+  })
+
+  it('names the display name once the corpus learned one', () => {
+    expect(formatIngest({ ...VALUE, userName: '炒股养家' })).toContain('into local blogger handle (炒股养家):')
+  })
+})
+
+describe('blogger_ingest_documents', () => {
+  /** Write one markdown document under a harness workspace. */
+  function writeDocument(harness: Harness, name: string, text: string): string {
+    const path = join(harness.root.path, name)
+    writeFileSync(path, text)
+    return path
+  }
+
+  it('folds a markdown document into an existing platform corpus', async () => {
+    const harness = await mount()
+    await harness.call('blogger_harvest', { user: USER })
+    const document = writeDocument(harness, 'deleted-call.md', [
+      '---',
+      'title: A deleted call',
+      'publishedAt: 2025-06-12',
+      '---',
+      '',
+      'Sell into strength.',
+    ].join('\n'))
+
+    const out = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+
+    expect(out.isError).toBe(false)
+    if (out.isError) return
+    expect(out.value).toMatchObject({
+      source: 'stub',
+      userID: USER,
+      userName: 'Stub Blogger',
+      documentsRead: 1,
+      postsIngested: 1,
+      repliesIngested: 0,
+      posts: 3,
+      replies: 2,
+      offlinePosts: 1,
+      offlineReplies: 0,
+    })
+
+    const stored = JSON.parse(readFileSync((out.value as { corpusPath: string }).corpusPath, 'utf8')) as {
+      posts: { id: string; origin?: string; documentPath?: string; title?: string }[]
+    }
+    expect(stored.posts.find(post => post.id === `offline:${document}`))
+      .toMatchObject({ origin: 'offline', documentPath: document, title: 'A deleted call' })
+  })
+
+  it('ingests into a local blogger that has no platform history', async () => {
+    const harness = await mount()
+    const document = writeDocument(harness, 'local-post.md', '# 一个离线帖子\n\n内容。')
+
+    const out = await harness.call('blogger_ingest_documents', {
+      user: 'local:炒股养家',
+      userName: '炒股养家',
+      documents: [document],
+    })
+
+    expect(out.isError).toBe(false)
+    if (out.isError) return
+    expect(out.value).toMatchObject({
+      source: 'local',
+      userID: '炒股养家',
+      userName: '炒股养家',
+      posts: 1,
+      replies: 0,
+      offlinePosts: 1,
+      offlineReplies: 0,
+    })
+    expect(out.content[0]).toMatchObject({
+      text: expect.stringContaining('Ingested 1 document(s) into local blogger 炒股养家 (炒股养家): 1 post(s), 0 reply/replies.') as string,
+    })
+  })
+
+  it('re-ingests an unchanged document without duplicating its record', async () => {
+    const harness = await mount()
+    const document = writeDocument(harness, 'once.md', '---\nplatformId: codeZ\npublishedAt: 2025-01-01\n---\nbody')
+
+    const first = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+    const second = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+
+    expect(first.isError).toBe(false)
+    expect(second.isError).toBe(false)
+    if (first.isError || second.isError) return
+    expect(second.value).toMatchObject({ documentsRead: 1, postsIngested: 1, posts: 1, offlinePosts: 1 })
+  })
+
+  it('files a document whose frontmatter names it a reply', async () => {
+    const harness = await mount()
+    const document = writeDocument(harness, 'answer.md', [
+      '---',
+      'kind: reply',
+      'publishedAt: 2025-07-01',
+      'topicTitle: Someone else',
+      'topicUrl: https://stub.example/a/other',
+      '---',
+      'Wait for volume.',
+    ].join('\n'))
+
+    const out = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+
+    expect(out.isError).toBe(false)
+    if (out.isError) return
+    expect(out.value).toMatchObject({ postsIngested: 0, repliesIngested: 1, offlinePosts: 0, offlineReplies: 1 })
+  })
+
+  it('uses the kind argument for a document whose frontmatter names none', async () => {
+    const harness = await mount()
+    const document = writeDocument(harness, 'unclassified.md', 'body with no frontmatter')
+
+    const asPost = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+    const asReply = await harness.call('blogger_ingest_documents', { user: USER, documents: [document], kind: 'reply' })
+
+    expect(asPost.isError).toBe(false)
+    expect(asReply.isError).toBe(false)
+    if (asPost.isError || asReply.isError) return
+    expect(asPost.value).toMatchObject({ postsIngested: 1, repliesIngested: 0, offlinePosts: 1 })
+    expect(asReply.value).toMatchObject({ postsIngested: 0, repliesIngested: 1, offlineReplies: 1 })
+  })
+
+  it('fails BLOGGER_DOCUMENT_INVALID on a local reference with no handle', async () => {
+    const harness = await mount()
+    const document = writeDocument(harness, 'handleless.md', 'body')
+
+    const out = await harness.call('blogger_ingest_documents', { user: 'local:', documents: [document] })
+
+    expect(out.isError).toBe(true)
+    if (!out.isError) return
+    expect(out.error.info?.code).toBe('BLOGGER_DOCUMENT_INVALID')
+  })
+
+  it('fails BLOGGER_DOCUMENT_INVALID on a document with no body', async () => {
+    const harness = await mount()
+    const document = writeDocument(harness, 'empty.md', '---\ntitle: Empty\n---\n')
+
+    const out = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+
+    expect(out.isError).toBe(true)
+    if (!out.isError) return
+    expect(out.error.info?.code).toBe('BLOGGER_DOCUMENT_INVALID')
+  })
+
+  it('stores no display name for a blogger neither the source nor the corpus names', async () => {
+    const harness = await mount({ identity: {} })
+    const document = writeDocument(harness, 'nameless.md', 'body')
+
+    const out = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+
+    expect(out.isError).toBe(false)
+    if (out.isError) return
+    expect(out.value).not.toHaveProperty('userName')
+    expect(out.content[0]).toMatchObject({
+      text: expect.stringContaining(`Ingested 1 document(s) into stub blogger ${USER}:`) as string,
+    })
   })
 })

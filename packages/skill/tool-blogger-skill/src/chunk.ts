@@ -27,9 +27,6 @@ export interface DigestChunk {
   readonly tokens: number
 }
 
-/** Appended to a single block too large for the budget on its own. */
-export const BLOCK_TRUNCATION_MARKER = '\n\n[... 本段过长，已截断 ...]'
-
 /** Cost of the newline joining two blocks, so the estimate matches the joined text. */
 const JOIN_TOKENS = 0.3
 
@@ -52,8 +49,9 @@ export function estimateTokens(text: string): number {
 
 /**
  * Render one corpus as ordered digest blocks: the header first, then the posts
- * and the replies in platform list order. A block that alone exceeds the budget
- * is cut with a visible marker, because a request carrying it could not be sent.
+ * and the replies in corpus list order. A record longer than the budget becomes
+ * several consecutive blocks rather than a truncated one, so a document far
+ * larger than a single request is still read in full.
  *
  * @param corpus - the corpus to render.
  * @param maxBlockTokens - the token budget one block may cost.
@@ -61,11 +59,14 @@ export function estimateTokens(text: string): number {
  */
 export function digestBlocks(corpus: BloggerCorpus, maxBlockTokens: number): DigestBlock[] {
   const withBody = corpus.posts.filter(post => post.bodyMarkdown !== undefined).length
+  const offline = corpus.posts.filter(post => post.origin === 'offline').length
+    + corpus.replies.filter(reply => reply.origin === 'offline').length
   const rendered = [
     [
       `# 博主 ${corpus.userName ?? corpus.userID}（${corpus.source}）`,
       ...corpus.profileUrl === undefined ? [] : [`主页：${corpus.profileUrl}`],
       `采集范围：主贴 ${corpus.posts.length} 篇（其中 ${withBody} 篇有正文），跟帖 ${corpus.replies.length} 条。`,
+      ...offline === 0 ? [] : [`其中 ${offline} 条来自离线文档，平台上已不可见。`],
     ].join('\n'),
     ...corpus.posts.map(post => [
       `## ${post.publishedAt} 《${post.title}》`,
@@ -75,7 +76,81 @@ export function digestBlocks(corpus: BloggerCorpus, maxBlockTokens: number): Dig
     ...corpus.replies.map(reply =>
       `- ${reply.repliedAt} ${reply.body} — 来自《${reply.topicTitle}》 ${reply.topicUrl}`),
   ]
-  return rendered.map(text => capBlock(text, maxBlockTokens))
+  return rendered.flatMap(text => splitBlock(text, maxBlockTokens))
+}
+
+/**
+ * Split one over-budget block into consecutive blocks that each fit the budget.
+ * Text splits at paragraph boundaries first and hard-slices only a paragraph that
+ * alone exceeds a whole request, so nothing is dropped.
+ *
+ * @param text - the rendered block.
+ * @param budget - the token budget one block may cost.
+ * @returns the block, or its consecutive pieces in reading order.
+ */
+function splitBlock(text: string, budget: number): DigestBlock[] {
+  const tokens = estimateTokens(text)
+  if (tokens <= budget) return [{ text, tokens }]
+  const blocks: DigestBlock[] = []
+  let parts: string[] = []
+  let used = 0
+  const flush = (): void => {
+    const joined = parts.join('\n\n')
+    blocks.push({ text: joined, tokens: estimateTokens(joined) })
+    parts = []
+    used = 0
+  }
+  for (const unit of splitParagraphs(text, budget)) {
+    const cost = estimateTokens(unit) + (parts.length === 0 ? 0 : JOIN_TOKENS)
+    if (parts.length > 0 && used + cost > budget) flush()
+    parts.push(unit)
+    used += cost
+  }
+  flush()
+  return blocks
+}
+
+/**
+ * Split text into pieces no larger than the budget, at paragraph boundaries.
+ *
+ * @param text - the text to split.
+ * @param budget - the token budget one piece may cost.
+ * @returns the pieces in reading order.
+ */
+function splitParagraphs(text: string, budget: number): string[] {
+  const pieces: string[] = []
+  for (const paragraph of text.split(/\n{2,}/u)) {
+    if (estimateTokens(paragraph) <= budget) {
+      pieces.push(paragraph)
+      continue
+    }
+    let rest = paragraph
+    while (rest.length > 0) {
+      const slice = sliceToTokens(rest, budget)
+      pieces.push(slice)
+      rest = rest.slice(slice.length)
+    }
+  }
+  return pieces
+}
+
+/**
+ * Slice one string to an estimated token budget. A positive budget always yields
+ * at least one character, so the returned prefix is never empty.
+ *
+ * @param text - the text to slice.
+ * @param budget - the estimated tokens to keep.
+ * @returns the longest prefix within the budget.
+ */
+function sliceToTokens(text: string, budget: number): string {
+  let tokens = 0
+  let end = 0
+  for (const character of text) {
+    tokens += isCjk(character.charCodeAt(0)) ? 1 : 0.3
+    if (tokens > budget) break
+    end += character.length
+  }
+  return text.slice(0, end)
 }
 
 /**
@@ -105,38 +180,6 @@ export function chunkBlocks(blocks: readonly DigestBlock[], maxTokens: number): 
   }
   flush()
   return chunks
-}
-
-/**
- * Cut one over-budget block and mark the cut.
- *
- * @param text - the rendered block.
- * @param maxTokens - the token budget the block may cost.
- * @returns the block, unchanged when it fits.
- */
-function capBlock(text: string, maxTokens: number): DigestBlock {
-  const tokens = estimateTokens(text)
-  if (tokens <= maxTokens) return { text, tokens }
-  const budget = Math.max(1, maxTokens - estimateTokens(BLOCK_TRUNCATION_MARKER))
-  return { text: `${sliceToTokens(text, budget)}${BLOCK_TRUNCATION_MARKER}`, tokens: maxTokens }
-}
-
-/**
- * Slice one string to an estimated token budget.
- *
- * @param text - the text to slice.
- * @param budget - the estimated tokens to keep.
- * @returns the longest prefix within the budget.
- */
-function sliceToTokens(text: string, budget: number): string {
-  let tokens = 0
-  let end = 0
-  for (const character of text) {
-    tokens += isCjk(character.charCodeAt(0)) ? 1 : 0.3
-    if (tokens > budget) break
-    end += character.length
-  }
-  return text.slice(0, end)
 }
 
 /**

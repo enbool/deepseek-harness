@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { BLOCK_TRUNCATION_MARKER, chunkBlocks, digestBlocks, estimateTokens } from '../src/chunk.ts'
+import { chunkBlocks, digestBlocks, estimateTokens } from '../src/chunk.ts'
 import type { BloggerCorpus } from '../src/types.ts'
 
 const CORPUS: BloggerCorpus = {
@@ -74,15 +74,56 @@ describe('digestBlocks', () => {
       .toContain('# 博主 905478（stub）')
   })
 
-  it('cuts a block too large for the budget and marks the cut', () => {
+  it('splits a record too large for the budget instead of cutting it', () => {
     const long: BloggerCorpus = {
       ...CORPUS,
       posts: [{ ...CORPUS.posts[0]!, bodyMarkdown: LONG }],
     }
-    const block = digestBlocks(long, 20)[1]
-    expect(block?.tokens).toBe(20)
-    expect(block?.text).toContain(BLOCK_TRUNCATION_MARKER)
-    expect(block?.text).not.toContain(LONG)
+    const blocks = digestBlocks(long, 20)
+    // The over-budget post becomes consecutive pieces; the header and reply stay single.
+    expect(blocks.length).toBeGreaterThan(4)
+    const post = blocks.filter(block => block.tokens <= 20)
+    expect(post.length).toBe(blocks.length)
+    const joined = blocks.map(block => block.text).join('')
+    expect(joined).toContain(LONG.slice(0, 40))
+    expect(joined).toContain(LONG.slice(-40))
+    expect(LONG.startsWith(joined.split('## ')[2] ?? '')).toBe(true)
+  })
+
+  it('hard-slices a single paragraph larger than the whole budget', () => {
+    const long: BloggerCorpus = {
+      ...CORPUS,
+      posts: [{ ...CORPUS.posts[0]!, bodyMarkdown: LONG }],
+    }
+    const blocks = digestBlocks(long, 20)
+
+    expect(blocks.every(block => block.tokens <= 20)).toBe(true)
+    expect(blocks.filter(block => block.text.startsWith('## 2026-01-02'))).toHaveLength(1)
+    expect(blocks.map(block => block.text).join('')).toContain(LONG)
+  })
+
+  it('joins several under-budget paragraphs into one block before starting the next', () => {
+    const paragraph = '追涨杀跌'.repeat(5)
+    const body = [paragraph, paragraph, paragraph].join('\n\n')
+    const grouped: BloggerCorpus = {
+      ...CORPUS,
+      posts: [{ ...CORPUS.posts[0]!, bodyMarkdown: body }],
+    }
+
+    const blocks = digestBlocks(grouped, 60)
+
+    expect(blocks.map(block => block.text.split(paragraph).length - 1)).toContain(2)
+    expect(blocks.every(block => block.tokens <= 60)).toBe(true)
+  })
+
+  it('reports the offline records in the header', () => {
+    const offline: BloggerCorpus = {
+      ...CORPUS,
+      posts: [{ ...CORPUS.posts[0]!, origin: 'offline', documentPath: '/saved/a.txt' }],
+      replies: [{ ...CORPUS.replies[0]!, origin: 'offline', documentPath: '/saved/r.txt' }],
+    }
+
+    expect(digestBlocks(offline, 100_000)[0]?.text).toContain('其中 2 条来自离线文档，平台上已不可见。')
   })
 })
 

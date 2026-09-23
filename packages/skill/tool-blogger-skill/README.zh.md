@@ -1,5 +1,5 @@
 ---
-description: "两个面向模型的工具：通过 ctx.bloggers 把某个平台博主的主贴、正文与跟帖采集为本地语料，再经 ctx.llm 蒸馏成可加载的 SKILL.md。"
+description: "三个面向模型的工具：通过 ctx.bloggers 汇集某位平台博主的语料——既可采集主贴、正文与跟帖，也可并入本地 markdown 文档——再经 ctx.llm 蒸馏成可加载的 SKILL.md。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-tool-blogger-skill` 把一位论坛博主变成可复用的技能。`blogger_harvest` 接收博主 ID 或主页 URL，在 `ctx.bloggers` 上解析出对应源，采集该博主的主贴、正文与跟帖，并合并进一份持久的按博主划分的语料。`blogger_build_skill` 读取该语料，在配置的技能根目录下写入两个文件：`SKILL.md`，一份用祈使句写成、可供另一位交易者直接照做的操作规程；以及它旁边的 `portrait.md`，即规则背后那位交易者的画像——他的世界观、他反复回到的论证，以及他自己的话。两个工具对平台都是只读的；本地只写入语料与技能文件。
+`dsh-tool-blogger-skill` 把一位论坛博主变成可复用的技能。`blogger_harvest` 用博主 ID 或主页 URL 在 `ctx.bloggers` 上解析，把该博主的主贴、正文与跟帖合并进一份持久的按博主划分的语料；`blogger_ingest_documents` 把本地 markdown 文档并入同一份语料。`blogger_build_skill` 读取该语料，在配置的技能根目录下写入两个文件：`SKILL.md`，一份可供另一位交易者直接照做的祈使句操作规程；以及它旁边的 `portrait.md`，即规则背后那位交易者的画像——他的世界观、他反复回到的论证，以及他自己的话。没有任何工具会写入平台；本地只写入语料与技能文件。
 
 ## 目录
 
@@ -57,14 +57,17 @@ kind: "package-reference"
 | `maxOutputChars` | `20000` | 单次渲染工具输出的上限 |
 | `timeoutMs` | `600000` | 工具调用的协作式超时预算（毫秒） |
 
-### 两个工具
+### 工具
 
 - `blogger_harvest` —— 解析 `user`（或 `user` 加显式 `source`）并采集一段页窗口。`postStartPage` 与 `replyStartPage` 决定两侧列表各自的起点，因此第二次调用能取到第一次取不到的页。它把结果合并进已存语料，保留更早一次采集已抓到的正文，并返回语料总量、本次新增量与分页事实，其中包含下次该传的页码。
+- `blogger_ingest_documents` —— 把本地 markdown 文档并入同一份语料。`user` 指定博主，`source` 在能解析出平台源时默认取该博主的平台源，`userName` 给出显示名，`documents` 列出文件路径，`kind`（默认 `post`）规定未声明类型的文档按哪一类处理。当平台删掉了读者留有离线副本的主贴，或博主在平台上根本没有主贴时使用它。从未被平台收录的博主使用内置的 `local` 源，它为这个纯离线身份给出 `source: local`，使 `blogger_build_skill` 沿与平台源相同的 `ctx.bloggers` 路径解析；对它调用 `blogger_harvest` 没有可读的平台历史。
 - `blogger_build_skill` —— 读取该语料并蒸馏为两个文件。能装进 `maxPromptTokens` 的语料一次读完；更大的语料按窗口分批读，每个窗口在 `<corpusRoot>/notes/<source>-<userID>/` 下写一份证据笔记，再由两次归并把笔记变成技能。窗口内容未变时其笔记会被复用而不重新生成。`SKILL.md` 是产物本身：一份祈使句写成的操作规程，覆盖适用范围、决策主干、判断规则、执行、仓位、禁止事项与操作前自检。其旁的 `portrait.md` 描写这些规则来自怎样一位交易者——他的世界观、反复出现的论证、自己承认过的错误——引用他的话但不点出任何主贴、日期或来源，`SKILL.md` 会链接到它。`skillName` 可覆盖模型提议的名称；文件写入 `<skillsRoot>/<skillName>-<显示名>/` 下，因此从技能根目录就能看出哪个目录属于哪位博主。
 
 ### 语料
 
 每位博主一个 JSON 文件，位于 `corpusRoot` 下，名为 `<source>-<userID>.json`。无论某次采集读的是哪一段窗口，记录都保持平台列表顺序（新在前）：从平台第一页开始的窗口合并到已存记录之前，从更靠后页开始的窗口则接在它们之后。主贴保留最新一份，并保留更早采集已抓到的正文；跟帖按 ID 去重；两个条数上限都作用在新的一端，因此越往下翻页越不会挤掉最新的内容。若文件不再符合记录语法，会以 `BLOGGER_CORPUS_INVALID` 显式失败，而不是交出一份半可信的语料。
+
+每条记录都带 `origin`：采集来的记为 `platform`，摄入的文档记为 `offline`；在该字段出现之前写入的记录按平台记录处理。`maxCorpusPosts` 与 `maxCorpusReplies` 两个上限只覆盖平台记录，因为离线记录是用户显式摄入所选文档的结果，而非自动增长。文档的记录 ID 由其路径推导，因此重新摄入未改动的文档会替换原记录而不追加副本；frontmatter 的 `platformId` 会认领某条平台记录的 ID，因此平台仍在的主贴的离线副本会替换那条平台记录，而不会重复计数。
 
 ### 失败与恢复
 
@@ -93,7 +96,7 @@ kind: "package-reference"
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：配置模式与路由成对校验 |
-| [`src/tools.ts`](src/tools.ts) | 两个面向模型的模式、编排、渲染与根目录解析 |
+| [`src/tools.ts`](src/tools.ts) | 面向模型的模式、编排、渲染与根目录解析 |
 | [`src/corpus.ts`](src/corpus.ts) | 语料记录语法、合并与 `ctx.fs` 访问 |
 | [`src/profile.ts`](src/profile.ts) | 摘要、辅助 LLM 请求及其会话记录、答案语法与 `SKILL.md` 写入 |
 | [`src/errors.ts`](src/errors.ts) | 稳定的错误码 |
@@ -104,7 +107,7 @@ kind: "package-reference"
 
 ### 蒸馏流程
 
-`blogger_build_skill` 把语料渲染成有序块，按 `maxPromptTokens` 分组成窗口，逐窗口读出证据笔记，然后做两次归并：一次写操作规程，一次写这些规则来自怎样一位交易者的画像。把归并拆开，是为了不让两份文档争夺同一个回答的输出预算——单个请求同时携带两者时正是这样超出了上限。每个请求都是手工构建而非由循环构建，因此自带系统提示词、被深度冻结，且从不被标记为循环请求。规程的回答由一个只含 name 与 description 的 JSON 头，以及标记行之后的纯 markdown 规程组成——这么长的文档无法在 JSON 字符串转义中存活——画像的回答则通篇是纯 markdown。解析失败时会把模型实际写出的前 300 个字符一并报出，供下一次调用修正。
+`blogger_build_skill` 把语料——平台记录与离线文档一视同仁——渲染成有序块，按 `maxPromptTokens` 分组成窗口，逐窗口读出证据笔记，然后做两次归并：一次写操作规程，一次写这些规则来自怎样一位交易者的画像。把归并拆开，是为了不让两份文档争夺同一个回答的输出预算——单个请求同时携带两者时正是这样超出了上限。每个请求都是手工构建而非由循环构建，因此自带系统提示词、被深度冻结，且从不被标记为循环请求。规程的回答由一个只含 name 与 description 的 JSON 头，以及标记行之后的纯 markdown 规程组成——这么长的文档无法在 JSON 字符串转义中存活——画像的回答则通篇是纯 markdown。解析失败时会把模型实际写出的前 300 个字符一并报出，供下一次调用修正。超出请求预算的记录会按段落边界拆成连续的多块，因此只有一个段落本身就超过整次请求时才会被硬切。
 
 </details>
 
@@ -126,11 +129,11 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-两个工具：`blogger_harvest` 与 `blogger_build_skill`。`blogger_harvest` 接收博主引用（`user`，可选 `source`）、两侧列表各自的起点（`postStartPage`、`replyStartPage`）、各自的读取页数（`postPages`、`replyPages`）与正文预算（`maxPosts`）。`blogger_build_skill` 接收同样的引用与可选的 `skillName`。所有数值上限都是部署设置；模型只传入引用、工具上报过的起始页，与部署允许的预算。完整 schema 见[生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-blogger-skill)。
+三个工具：`blogger_harvest`、`blogger_ingest_documents` 与 `blogger_build_skill`。`blogger_harvest` 接收博主引用（`user`，可选 `source`）、两侧列表各自的起点（`postStartPage`、`replyStartPage`）、各自的读取页数（`postPages`、`replyPages`）与正文预算（`maxPosts`）。`blogger_ingest_documents` 接收同样的引用、可选的显示名（`userName`）、文档路径（`documents`），以及未声明类型的文档默认归入的类型（`kind`）。`blogger_build_skill` 接收同样的引用与可选的 `skillName`。所有数值上限都是部署设置；模型只传入引用、工具上报过的起始页，与部署允许的预算。完整 schema 见[生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-blogger-skill)。
 
 #### Token 影响
 
-两个工具带来固定的每请求模式开销。
+三个工具带来固定的每请求模式开销。
 
 #### KV 缓存影响
 
@@ -140,7 +143,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-`blogger_harvest` 先渲染一行摘要，给出源、用户 ID、显示名、主贴与正文数、跟帖数；再渲染一行说明本次新增了多少、读取了哪一段页窗口；随后在任一侧仍有更多时，给出下次该传的确切 `postStartPage` 或 `replyStartPage`；最后给出语料路径。`blogger_build_skill` 渲染技能名、参与蒸馏的条数、规程路径、画像路径、描述，以及读了多少证据、用了多少次模型请求。被截断的输出以 `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)` 结尾；失败呈现为 `Error: <message>`。
+`blogger_harvest` 先渲染一行摘要，给出源、用户 ID、显示名、主贴与正文数、跟帖数；再渲染一行说明本次新增了多少、读取了哪一段页窗口；随后在任一侧仍有更多时，给出下次该传的确切 `postStartPage` 或 `replyStartPage`；最后给出语料路径。`blogger_ingest_documents` 渲染博主身份、读取的文档篇数、新增的主贴与跟帖数，以及语料路径。`blogger_build_skill` 渲染技能名、参与蒸馏的条数、规程路径、画像路径、描述，以及读了多少证据、用了多少次模型请求。被截断的输出以 `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)` 结尾；失败呈现为 `Error: <message>`。
 
 #### Token 影响
 
@@ -162,6 +165,8 @@ kind: "package-reference"
 - **规程的质量取决于语料** —— 只有寥寥数篇主贴的博主，模型无法把规则建立在反复出现的行为之上，而本包也无法区分语料厚薄。规程自身的「适用范围」一节就是模型对此的诚实交代；会话日志记录了证据规模与请求次数。
 - **超出单次请求的语料会分窗口读取** —— 归并一遍要读完所有窗口笔记，因此当一个语料大到需要非常多窗口时，最终会超出该预算并以 `BLOGGER_EVIDENCE_TOO_LARGE` 显式失败，而不是发出一个被截断的请求。分层归并是后续要做的事。
 - **蒸馏只尝试一次** —— 该请求是手工构建的 `ctx.llm.stream` 调用，从不重试；提供者失败会呈现给模型，由模型再次调用工具。
+- **文档在语料中的身份来自其路径** —— 重命名或移动文档文件会新建一条记录，而不会替换原有记录；又因为离线记录不受保留上限约束，被取代的那条会一直留在语料里。
+- **摄入只读取 markdown** —— 文档是带可选 frontmatter 的 markdown，因此保存下来的 HTML 页面、PDF 或 Word 文件必须先转成 markdown。
 
 <a id="dev-note"></a>
 ### 开发备注

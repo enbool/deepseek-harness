@@ -10,16 +10,88 @@
 
 import { isAbsolute, join, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { BloggerPostSummary, BloggerRef, BloggerResolution } from '@deepseek-ai/dsh-blogger'
+import type { BloggerPostSummary, BloggerRef, BloggerResolution, BloggerSource } from '@deepseek-ai/dsh-blogger'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { isSkillName } from '@deepseek-ai/dsh-skill'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { BloggerCorpusStore } from './corpus.ts'
 import type { CorpusBounds, HarvestedCorpus } from './corpus.ts'
-import { BLOGGER_CORPUS_EMPTY, BLOGGER_CORPUS_MISSING, BLOGGER_PROFILE_INVALID, BloggerSkillError } from './errors.ts'
+import { BLOGGER_CORPUS_EMPTY, BLOGGER_CORPUS_MISSING, BLOGGER_DOCUMENT_INVALID, BLOGGER_PROFILE_INVALID, BloggerSkillError } from './errors.ts'
 import { distillProfile, resolveRoute, skillDirectory, writeSkillFile } from './profile.ts'
 import type { DistillLimits, ModelRoute } from './profile.ts'
-import type { BloggerCorpus, CorpusPost } from './types.ts'
+import type { BloggerCorpus, CorpusPost, CorpusReply } from './types.ts'
+import { documentPost, documentReply, parseDocument } from './documents.ts'
+
+/** The reference prefix that selects the offline source, as in `local:炒股养家`. */
+export const LOCAL_PREFIX = 'local:'
+
+/**
+ * The source that gives an offline-only blogger an identity. A blogger whose
+ * platform history was deleted, or who never had one, still needs a reference
+ * `ctx.bloggers.resolve` can carry to a corpus, and the documents themselves
+ * arrive through `blogger_ingest_documents`. It holds no platform data, so it
+ * matches only its own `local:` references and never claims a platform blogger's.
+ */
+export const LOCAL_SOURCE: BloggerSource = {
+  id: 'local',
+  displayName: '离线文档',
+  matches: input => input.trim().startsWith(LOCAL_PREFIX),
+  resolve: (input) => {
+    const handle = input.trim().slice(LOCAL_PREFIX.length).trim()
+    if (handle.length === 0) {
+      throw new BloggerSkillError('a local blogger reference needs a handle, as in local:炒股养家', BLOGGER_DOCUMENT_INVALID)
+    }
+    return Promise.resolve({ source: 'local', userID: handle })
+  },
+  listPosts: () => Promise.resolve({ items: [], pageNo: 1, pagesFetched: 0, hasMore: false }),
+  listReplies: () => Promise.resolve({ items: [], pageNo: 1, pagesFetched: 0, hasMore: false }),
+  fetchPost: () => Promise.reject(new BloggerSkillError(
+    'the local source holds no platform posts; fold offline documents in with blogger_ingest_documents',
+    BLOGGER_DOCUMENT_INVALID,
+  )),
+}
+
+/** One document intake's result, as the model sees it. */
+export interface IngestValue {
+  /** The source id the corpus belongs to. */
+  readonly source: string
+  /** The blogger's user id on that source. */
+  readonly userID: string
+  /** The blogger's display name, once known. */
+  readonly userName?: string
+  /** Absolute corpus file path. */
+  readonly corpusPath: string
+  /** How many documents this call read. */
+  readonly documentsRead: number
+  /** How many post records this call contributed. */
+  readonly postsIngested: number
+  /** How many reply records this call contributed. */
+  readonly repliesIngested: number
+  /** Posts the corpus now holds. */
+  readonly posts: number
+  /** Replies the corpus now holds. */
+  readonly replies: number
+  /** Of those posts, how many came from documents. */
+  readonly offlinePosts: number
+  /** Of those replies, how many came from documents. */
+  readonly offlineReplies: number
+}
+
+/**
+ * Render one document intake's result for the model.
+ *
+ * @param value - the tool's value.
+ * @returns the rendered text.
+ */
+export function formatIngest(value: IngestValue): string {
+  const who = `${value.source} blogger ${value.userID}${value.userName === undefined ? '' : ` (${value.userName})`}`
+  return [
+    `Ingested ${value.documentsRead} document(s) into ${who}: ${value.postsIngested} post(s), ${value.repliesIngested} reply/replies.`,
+    `Corpus now holds ${value.posts} post(s) and ${value.replies} reply/replies, of which ${value.offlinePosts} and ${value.offlineReplies} came from documents.`,
+    `Corpus: ${value.corpusPath}`,
+    'Run blogger_build_skill to distil it.',
+  ].join('\n')
+}
 
 /** Deployment-owned bounds the blogger tools render, paginate, and distill under. */
 export interface BloggerToolLimits extends CorpusBounds, DistillLimits {
@@ -194,7 +266,9 @@ function toCorpusPosts(summaries: readonly BloggerPostSummary[], stored: Blogger
   const bodies = new Map((stored?.posts ?? []).map(post => [post.id, post.bodyMarkdown]))
   return summaries.map((summary) => {
     const body = bodies.get(summary.id)
-    return body === undefined ? { ...summary } : { ...summary, bodyMarkdown: body }
+    return body === undefined
+      ? { ...summary, origin: 'platform' }
+      : { ...summary, bodyMarkdown: body, origin: 'platform' }
   })
 }
 
@@ -217,6 +291,95 @@ function countNew(stored: ReadonlySet<string>, harvested: readonly { readonly id
  * @param limits - the configured collection, output, and distillation bounds.
  */
 export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, limits: BloggerToolLimits): void {
+  ctx.bloggers.register(LOCAL_SOURCE)
+  ctx.tools.register(defineTool({
+    name: 'blogger_ingest_documents',
+    description: 'Fold local markdown documents into a blogger\'s corpus. Use it for material the platform deleted or never carried: pass the same user as blogger_harvest to add documents to a platform blogger, or a reference beginning with local: for a blogger with no platform history. Each document is markdown with optional YAML frontmatter naming title, publishedAt, kind, platformId, topicTitle, and topicUrl. Re-ingesting an unchanged document replaces its record instead of duplicating it.',
+    parameters: {
+      user: {
+        type: 'string',
+        required: true,
+        description: 'The blogger\'s id or profile page URL on the platform, or a reference such as local:炒股养家 for a blogger with no platform history.',
+      },
+      source: {
+        type: 'string',
+        description: 'Source id, when the reference alone does not select one. Omit to let the reference select its own source.',
+      },
+      userName: {
+        type: 'string',
+        description: 'Display name to store for a blogger the source does not name, such as a blogger reached through a local: reference.',
+      },
+      documents: {
+        type: 'array',
+        required: true,
+        description: 'Paths to the markdown documents to read and fold into the corpus.',
+        items: { type: 'string' },
+      },
+      kind: {
+        type: 'string',
+        description: 'What a document whose frontmatter names no kind is: post or reply. Defaults to post.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          source: { type: 'string', required: true },
+          userID: { type: 'string', required: true },
+          userName: { type: 'string' },
+          corpusPath: { type: 'string', required: true },
+          documentsRead: { type: 'integer', required: true },
+          postsIngested: { type: 'integer', required: true },
+          repliesIngested: { type: 'integer', required: true },
+          posts: { type: 'integer', required: true },
+          replies: { type: 'integer', required: true },
+          offlinePosts: { type: 'integer', required: true },
+          offlineReplies: { type: 'integer', required: true },
+        },
+      },
+      render: (_args, value) => boundedText(formatIngest(value), limits.maxOutputChars),
+    },
+    timeoutMs: limits.timeoutMs,
+    isConcurrencySafe: () => false,
+    async execute(args, exec) {
+      const resolution = await resolveBlogger(ctx, args, exec.signal)
+      const cwd = exec.agent?.session.header.cwd
+      const store = storeFor(ctx, options, limits, cwd)
+      const stored = await store.read(resolution.ref.source, resolution.ref.userID, exec.signal)
+      const posts: CorpusPost[] = []
+      const replies: CorpusReply[] = []
+      for (const path of args.documents) {
+        const target = await ctx.fs.resolve(resolveRoot(path, cwd), { signal: exec.signal })
+        const text = await ctx.fs.readText(target, exec.signal)
+        const document = parseDocument(path, text, args.kind === 'reply' ? 'reply' : 'post')
+        if (document.kind === 'post') posts.push(documentPost(document))
+        else replies.push(documentReply(document))
+      }
+      const userName = args.userName ?? resolution.ref.userName
+      const corpus = await store.ingest(stored, {
+        source: resolution.ref.source,
+        userID: resolution.ref.userID,
+        updatedAt: new Date().toISOString(),
+        ...userName === undefined ? {} : { userName },
+        posts,
+        replies,
+      }, exec.signal)
+      return {
+        source: corpus.source,
+        userID: corpus.userID,
+        ...corpus.userName === undefined ? {} : { userName: corpus.userName },
+        corpusPath: store.pathFor(corpus.source, corpus.userID),
+        documentsRead: args.documents.length,
+        postsIngested: posts.length,
+        repliesIngested: replies.length,
+        posts: corpus.posts.length,
+        replies: corpus.replies.length,
+        offlinePosts: corpus.posts.filter(post => post.origin === 'offline').length,
+        offlineReplies: corpus.replies.filter(reply => reply.origin === 'offline').length,
+      }
+    },
+  }))
   ctx.tools.register(defineTool({
     name: 'blogger_harvest',
     description: 'Harvest a platform blogger\'s posts and replies into a local corpus. Pass the blogger\'s id or profile page URL; each call reads one page window, so pass the returned next page to continue past it.',
@@ -289,7 +452,7 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
         ...ref.userName === undefined ? {} : { userName: ref.userName },
         ...ref.profileUrl === undefined ? {} : { profileUrl: ref.profileUrl },
         posts: harvested,
-        replies: replies.items,
+        replies: replies.items.map(reply => ({ ...reply, origin: 'platform' })),
       }
       const corpus = await store.merge(stored, harvestedCorpus, exec.signal)
       const value: HarvestValue = {
