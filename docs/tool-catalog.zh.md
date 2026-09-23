@@ -2706,7 +2706,7 @@ web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可�
   "properties": {
     "user": {
       "type": "string",
-      "description": "The blogger's numeric id or their profile page URL on the platform, for example 905478 or https://www.tgb.cn/blog/905478."
+      "description": "The blogger's id or profile page URL on the platform, written as that platform writes it, for example 905478 or https://www.tgb.cn/blog/905478. Omit source when the reference alone selects its platform."
     },
     "source": {
       "type": "string",

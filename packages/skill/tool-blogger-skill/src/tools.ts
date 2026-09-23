@@ -391,7 +391,7 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
       user: {
         type: 'string',
         required: true,
-        description: 'The blogger\'s numeric id or their profile page URL on the platform, for example 905478 or https://www.tgb.cn/blog/905478.',
+        description: 'The blogger\'s id or profile page URL on the platform, written as that platform writes it, for example 905478 or https://www.tgb.cn/blog/905478. Omit source when the reference alone selects its platform.',
       },
       source: {
         type: 'string',
