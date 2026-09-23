@@ -39,6 +39,9 @@ packages/**/__pycache__/
 apps/web/dist/
 .artifacts/
 .dsh-build/
+# Local harness state (blogger corpora, generated skills). Anchored so the
+# tracked snapshots/**/.dsh/skills fixtures stay visible.
+/.dsh/
 .playwright-mcp/
 .orig
 .worktrees/

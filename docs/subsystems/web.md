@@ -134,6 +134,14 @@ The HTTP provider resolves each actual request, rejects non-public answers inclu
 
 `WebError extends HarnessError` ([core.md](core.md) error taxonomy) with a `code: string` (open, like every other seam's error — `LlmError`, `SubagentError`), not a closed union: a provider may raise its own codes without editing `dsh-web`, and consumers must tolerate an unknown code. The codes split by owner. Seam-neutral codes are raised by the shared `WebRuntime` contract: `WEB_PROVIDER_UNAVAILABLE`, `WEB_PROVIDER_CONFIGURED_MISSING`, `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`, `WEB_PROVIDER_AMBIGUOUS`, `WEB_DUPLICATE_PROVIDER` (a registration-time programming error, the analogue of `LlmRuntime`'s `DUPLICATE_ADAPTER`), `WEB_ABORTED`, and `WEB_PROVIDER_ERROR` (the catch-all for a provider's own failure surfaced through the seam, including network/transport failure — DNS, connection refused, TLS). Fetch-transport codes are owned by the `dsh-web-fetch-http` implementation and a different fetch backend need not raise them: `WEB_INVALID_URL`, `WEB_BLOCKED_URL`, `WEB_REDIRECT_BLOCKED`, `WEB_FETCH_TOO_LARGE`, `WEB_FETCH_TIMEOUT`, `WEB_UNSUPPORTED_CONTENT_TYPE`.
 
+## Blogger source
+
+`ctx.bloggers` is a sibling capability for reading one named blogger on a forum platform. Where `ctx.web` retrieves arbitrary URLs, this seam answers who a user is and what they wrote: a platform package registers one `BloggerSource`, and a consumer resolves a user's id or profile-page URL to a `BloggerRef` before collecting that blogger's posts and replies through the same object.
+
+`BloggerSource` is the provider contract. `matches(input)` is a pure syntactic test; `resolve(input, signal)` canonicalizes a reference `matches` accepted; `listPosts` and `listReplies` each return one bounded `BloggerPage` slice; `fetchPost` returns one post body as markdown, keyed by an id the same source reported. `BloggerSourceInfo` is the registry's discovery record — an id and a display name — and `BloggerResolution` pairs the recognizing source with the identity it resolved.
+
+Resolution never depends on registration order: exactly one matching source resolves the reference, none raises `BLOGGER_SOURCE_UNRECOGNIZED`, and several raise `BLOGGER_SOURCE_AMBIGUOUS` naming the candidates so the caller can name one. A source asked to resolve a reference its own grammar rejects raises `BLOGGER_REFERENCE_INVALID`, and a duplicate registration raises `BLOGGER_SOURCE_DUPLICATE`. Platform failures keep their own taxonomy: the shipped taoguba provider raises `TgbError` with the `TGB_*` codes.
+
 ## The service
 
 `WebRuntime` registers search and fetch providers, rejects duplicate ids with `WEB_DUPLICATE_PROVIDER`, and resolves providers at execution time with structured selection errors. The local fetch backend accepts only HTTP(S), rejects credentials, resolves each hostname once, rejects any answer set containing a non-public IPv4 or IPv6 destination or an active-prefix NAT64 translation to non-public IPv4, pins the request connection to the validated addresses, repeats those checks for every same-origin redirect hop, caps redirects, bytes, characters, and time, and decodes the body; the tool owns presentation.
@@ -145,6 +153,59 @@ The HTTP provider resolves each actual request, rejects non-public answers inclu
 ## Cordis API
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxbloggers--bloggersourceregistry"></a>
+
+### `ctx.bloggers` — `BloggerSourceRegistry`
+
+The blogger source registry, registered as `ctx.bloggers` (one instance per context). It owns the set of platform sources, their ids, and their lifetime.
+
+```ts cordis-catalog
+/**
+ * Register one platform source. Throws {@link BloggerError}
+ * `BLOGGER_SOURCE_DUPLICATE` when its id is already registered.
+ *
+ * @param source - the source; its `id` is the registry key.
+ * @returns the disposer that unregisters the source.
+ */
+register(source: BloggerSource): () => void
+
+/**
+ * Report every registered source for discovery.
+ *
+ * @returns one entry per registered source, in registration order.
+ */
+list(): BloggerSourceInfo[]
+
+/**
+ * Look up one source by id.
+ *
+ * @param id - the source id to look up.
+ * @returns the source, or `undefined` when no source carries that id.
+ */
+get(id: string): BloggerSource | undefined
+
+/**
+ * Resolve one source by id, failing loud when it is absent.
+ *
+ * @param id - the source id a caller named explicitly.
+ * @returns the registered source.
+ */
+require(id: string): BloggerSource
+
+/**
+ * Resolve a user's id-or-homepage reference to one source's identity. Exactly
+ * one registered source must recognize the reference; none, or more than one,
+ * fails with the matching {@link BloggerError} code.
+ *
+ * @param input - the caller's raw user reference.
+ * @param signal - cancellation signal forwarded to the resolving source.
+ * @returns the recognizing source and the identity it resolved.
+ */
+async resolve(input: string, signal: AbortSignal): Promise<BloggerResolution>
+```
+
+Source: [`packages/web/blogger/src/index.ts`](../../packages/web/blogger/src/index.ts)
 
 <a id="ctxweb--webruntime"></a>
 

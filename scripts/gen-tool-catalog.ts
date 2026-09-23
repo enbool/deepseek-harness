@@ -9,6 +9,7 @@
 import { globSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import type { CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
@@ -71,6 +72,9 @@ import McpResources from '@deepseek-ai/dsh-mcp-resources'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import { registerListSubagentModels } from '../packages/subagent/tool-subagent/src/list-models.ts'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
+import BloggerSourceRegistry from '@deepseek-ai/dsh-blogger'
+import * as ToolTgb from '@deepseek-ai/dsh-tool-tgb'
+import * as ToolBloggerSkill from '@deepseek-ai/dsh-tool-blogger-skill'
 import WorkflowEngine from '@deepseek-ai/dsh-workflow'
 import type { WorkflowRun, WorkflowStartRequest } from '@deepseek-ai/dsh-workflow'
 import * as ToolRalph from '@deepseek-ai/dsh-tool-ralph'
@@ -670,6 +674,37 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-tgb',
+    dir: 'tool-tgb',
+    source: 'packages/web/tool-tgb/src/index.ts',
+    requires: ['ctx.tools', 'ctx.credentials'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // The schemas are fixed; the credential resolves per call, never at load.
+      ctx.provide('credentials', {} as CredentialProvider)
+      await ctx.plugin(ToolTgb, { cookie: 'TGB_COOKIE' })
+    },
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-blogger-skill',
+    dir: 'tool-blogger-skill',
+    source: 'packages/skill/tool-blogger-skill/src/index.ts',
+    requires: ['ctx.tools', 'ctx.bloggers', 'ctx.llm', 'ctx.fs'],
+    writes: ['tool/call', 'tool/result', 'blogger/distill-request', 'a SKILL.md under the configured skill root'],
+    async mount(ctx) {
+      // Whether a platform source is registered does not change either schema.
+      await ctx.plugin(BloggerSourceRegistry)
+      await ctx.plugin(LlmRuntime)
+      await ctx.plugin(LocalFileSystem)
+      await ctx.plugin(ToolBloggerSkill, {
+        provider: 'catalog',
+        model: 'catalog',
+        corpusRoot: resolve(root, '.tmp/tool-catalog/bloggers'),
+        skillsRoot: resolve(root, '.tmp/tool-catalog/skills'),
+      })
+    },
   },
 ]
 

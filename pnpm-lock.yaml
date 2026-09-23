@@ -11278,6 +11278,46 @@ importers:
         specifier: workspace:*
         version: link:../skill
 
+  packages/skill/tool-blogger-skill:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-blogger':
+        specifier: workspace:*
+        version: link:../../web/blogger
+      '@deepseek-ai/dsh-fs':
+        specifier: workspace:*
+        version: link:../../fs/fs
+      '@deepseek-ai/dsh-fs-local':
+        specifier: workspace:*
+        version: link:../../fs/fs-local
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../core/session
+      '@deepseek-ai/dsh-skill':
+        specifier: workspace:*
+        version: link:../skill
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:*
+        version: link:../../core/system-prompt
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../core/tools
+      '@deepseek-ai/dsh-util-values':
+        specifier: workspace:*
+        version: link:../../util/values
+
   packages/skill/tool-skill:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -12962,6 +13002,34 @@ importers:
         specifier: workspace:~
         version: link:../../../vendor/cordis
 
+  packages/web/blogger:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../llm/llm
+
+  packages/web/blogger-source-tgb:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-blogger':
+        specifier: workspace:*
+        version: link:../blogger
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:*
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-tool-tgb':
+        specifier: workspace:*
+        version: link:../tool-tgb
+
   packages/web/tool-tgb:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -12978,22 +13046,22 @@ importers:
         version: 7.2.4
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: workspace:^
+        specifier: workspace:~
         version: link:../../../vendor/cordis
       '@deepseek-ai/dsh-credentials':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../credentials/credentials
       '@deepseek-ai/dsh-llm':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../llm/llm
       '@deepseek-ai/dsh-scope':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/scope
       '@deepseek-ai/dsh-timeout':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../util/timeout
       '@deepseek-ai/dsh-tools':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../core/tools
       '@types/turndown':
         specifier: ^5.0.6

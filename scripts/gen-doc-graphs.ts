@@ -745,6 +745,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Search and fetch providers register into one ctx.web seam; tool-web owns the stable model-facing names.',
   },
   {
+    key: 'bloggers',
+    pkg: 'blogger',
+    title: 'Blogger source seam',
+    mode: 'seam',
+    implementations: ['blogger-source-tgb'],
+    consumers: ['tool-blogger-skill'],
+    note: 'Platform sources register into one ctx.bloggers seam; tool-blogger-skill owns the model-facing harvest and distillation tools.',
+  },
+  {
     key: 'spillStore',
     pkg: 'spill',
     title: 'Spill storage seam',

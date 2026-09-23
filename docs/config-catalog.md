@@ -419,6 +419,34 @@ Depends on: [`LocalConfig`](#deepseek-aidsh-bash-local)
 
 Source: [`packages/shell/bash-sandbox/src/index.ts:36`](../packages/shell/bash-sandbox/src/index.ts)
 
+<a id="deepseek-aidsh-blogger-source-tgb"></a>
+
+## `@deepseek-ai/dsh-blogger-source-tgb`
+
+Requires: `bloggers` · `credentials`
+
+```ts config-catalog
+/** Plugin config: the site login state and every deployment-owned request bound. */
+export interface Config {
+  /**
+   * Credential reference holding the logged-in tgb.cn `Cookie` request-header
+   * value (copy it from a logged-in browser's request headers). Resolved once
+   * per request, so updating it never needs a plugin restart.
+   */
+  readonly cookie: string
+  /** Per-request cooperative timeout budget (ms). Defaults to 30000. */
+  readonly timeoutMs?: number
+  /** Per-response size cap in bytes. Defaults to 4000000. */
+  readonly maxResponseBytes?: number
+  /** Minimum pause between consecutive paginated requests (ms). Defaults to 500. */
+  readonly requestIntervalMs?: number
+  /** Request User-Agent header value. Defaults to a current Chrome UA. */
+  readonly userAgent?: string
+}
+```
+
+Source: [`packages/web/blogger-source-tgb/src/index.ts:33`](../packages/web/blogger-source-tgb/src/index.ts)
+
 <a id="deepseek-aidsh-client-connection"></a>
 
 ## `@deepseek-ai/dsh-client-connection`
@@ -3333,6 +3361,46 @@ export interface Config {
 
 Source: [`packages/shell/tool-bash-persistent/src/index.ts:443`](../packages/shell/tool-bash-persistent/src/index.ts)
 
+<a id="deepseek-aidsh-tool-blogger-skill"></a>
+
+## `@deepseek-ai/dsh-tool-blogger-skill`
+
+Requires: `tools` · `bloggers` · `llm` · `fs`
+
+```ts config-catalog
+/** Plugin config: the storage roots, the optional model route, and every deployment bound. */
+export interface Config {
+  /** Directory the skill files are written under; relative paths resolve against the session workspace. Defaults to `.dsh/skills`. */
+  readonly skillsRoot?: string
+  /** Directory the corpora are stored under; relative paths resolve against the session workspace. Defaults to `.dsh/bloggers`. */
+  readonly corpusRoot?: string
+  /** Distillation provider route. Set together with `model`; omit both to inherit the session's request target. */
+  readonly provider?: string
+  /** Distillation model id. Set together with `provider`; omit both to inherit the session's request target. */
+  readonly model?: string
+  /** Page budget for one harvest's post collection; the tools reject larger `postPages`. Defaults to 3. */
+  readonly maxPostPages?: number
+  /** Page budget for one harvest's reply collection; the tools reject larger `replyPages`. Defaults to 3. */
+  readonly maxReplyPages?: number
+  /** Post bodies one harvest may fetch; the tools reject a larger `maxPosts`. Defaults to 20. */
+  readonly maxPosts?: number
+  /** Maximum posts one corpus retains. Defaults to 300. */
+  readonly maxCorpusPosts?: number
+  /** Maximum replies one corpus retains. Defaults to 600. */
+  readonly maxCorpusReplies?: number
+  /** Character budget for the corpus digest. Defaults to 400000. */
+  readonly maxPromptChars?: number
+  /** Output-token cap for the distillation request. Defaults to 16000. */
+  readonly maxOutputTokens?: number
+  /** Cap on one complete rendered tool output in characters. Defaults to 20000. */
+  readonly maxOutputChars?: number
+  /** Cooperative tool-call timeout budget (ms). Defaults to 600000. */
+  readonly timeoutMs?: number
+}
+```
+
+Source: [`packages/skill/tool-blogger-skill/src/index.ts:69`](../packages/skill/tool-blogger-skill/src/index.ts)
+
 <a id="deepseek-aidsh-tool-fs"></a>
 
 ## `@deepseek-ai/dsh-tool-fs`
@@ -3691,6 +3759,38 @@ export interface Config {
 ```
 
 Source: [`packages/terminal/tool-terminal/src/index.ts:36`](../packages/terminal/tool-terminal/src/index.ts)
+
+<a id="deepseek-aidsh-tool-tgb"></a>
+
+## `@deepseek-ai/dsh-tool-tgb`
+
+Requires: `tools` · `credentials`
+
+```ts config-catalog
+/** Plugin config: the site login state and every deployment-owned bound. */
+export interface Config {
+  /**
+   * Credential reference holding the logged-in tgb.cn `Cookie` request-header
+   * value (copy it from a logged-in browser's request headers). Resolved once
+   * per tool call, so updating the credential never needs a plugin restart.
+   */
+  readonly cookie: string
+  /** Per-request cooperative timeout budget (ms). Defaults to 30000. */
+  readonly timeoutMs?: number
+  /** Page budget for one paginated tool call; the tools reject larger `maxPages`. Defaults to 5. */
+  readonly maxPages?: number
+  /** Per-response size cap in bytes. Defaults to 4000000. */
+  readonly maxResponseBytes?: number
+  /** Cap on one complete rendered tool output in characters. Defaults to 200000. */
+  readonly maxOutputChars?: number
+  /** Minimum pause between consecutive paginated requests (ms). Defaults to 500. */
+  readonly requestIntervalMs?: number
+  /** Request User-Agent header value. Defaults to a current Chrome UA. */
+  readonly userAgent?: string
+}
+```
+
+Source: [`packages/web/tool-tgb/src/index.ts:63`](../packages/web/tool-tgb/src/index.ts)
 
 <a id="deepseek-aidsh-tool-todo"></a>
 
@@ -4105,6 +4205,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-api-account-controller` — requires `deepseekAccount` ([`packages/api/account-controller/src/index.ts`](../packages/api/account-controller/src/index.ts))
 - `@deepseek-ai/dsh-api-remotes` — requires `typertGateway` ([`packages/api/remotes/src/index.ts`](../packages/api/remotes/src/index.ts))
 - `@deepseek-ai/dsh-authorization` — requires `credentials` ([`packages/credentials/authorization/src/index.ts`](../packages/credentials/authorization/src/index.ts))
+- `@deepseek-ai/dsh-blogger` ([`packages/web/blogger/src/index.ts`](../packages/web/blogger/src/index.ts))
 - `@deepseek-ai/dsh-browser-use` ([`packages/browser-use/browser-use/src/index.ts`](../packages/browser-use/browser-use/src/index.ts))
 - `@deepseek-ai/dsh-client-file-upload` — requires `agents` · `attachments` · `commands` · `connection` ([`packages/client/file-upload/src/index.ts`](../packages/client/file-upload/src/index.ts))
 - `@deepseek-ai/dsh-client-locale` ([`packages/client/locale/src/index.ts`](../packages/client/locale/src/index.ts))

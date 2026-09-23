@@ -543,6 +543,43 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'bloggers',
+    summary: 'The blogger source registry, registered as `ctx.bloggers` (one instance per context).',
+    description: 'The blogger source registry, registered as `ctx.bloggers` (one instance per context). It owns the set of platform sources, their ids, and their lifetime.',
+    methods: [
+      {
+        signature: 'register(source: BloggerSource): () => void',
+        description: 'Register one platform source. Throws BloggerError `BLOGGER_SOURCE_DUPLICATE` when its id is already registered.',
+        parameters: [{ name: 'source', description: 'the source; its `id` is the registry key.' }],
+        returns: 'the disposer that unregisters the source.',
+      },
+      {
+        signature: 'list(): BloggerSourceInfo[]',
+        description: 'Report every registered source for discovery.',
+        parameters: [],
+        returns: 'one entry per registered source, in registration order.',
+      },
+      {
+        signature: 'get(id: string): BloggerSource | undefined',
+        description: 'Look up one source by id.',
+        parameters: [{ name: 'id', description: 'the source id to look up.' }],
+        returns: 'the source, or `undefined` when no source carries that id.',
+      },
+      {
+        signature: 'require(id: string): BloggerSource',
+        description: 'Resolve one source by id, failing loud when it is absent.',
+        parameters: [{ name: 'id', description: 'the source id a caller named explicitly.' }],
+        returns: 'the registered source.',
+      },
+      {
+        signature: 'async resolve(input: string, signal: AbortSignal): Promise<BloggerResolution>',
+        description: 'Resolve a user\'s id-or-homepage reference to one source\'s identity. Exactly one registered source must recognize the reference; none, or more than one, fails with the matching BloggerError code.',
+        parameters: [{ name: 'input', description: 'the caller\'s raw user reference.' }, { name: 'signal', description: 'cancellation signal forwarded to the resolving source.' }],
+        returns: 'the recognizing source and the identity it resolved.',
+      },
+    ],
+  },
+  {
     key: 'browserUse',
     summary: 'Owns one optional provider registration in the shared browser-use service.',
     description: 'Owns one optional provider registration in the shared browser-use service.',
@@ -4472,6 +4509,42 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'BashEnvVariableInfo',
     declaration: 'export interface BashEnvVariableInfo extends BashEnvVariable {\n    contributor: string;\n    key: DshEnvironmentKey;\n}',
+  },
+  {
+    name: 'BloggerListRequest',
+    declaration: 'export interface BloggerListRequest {\n    readonly pageNo: number;\n    readonly maxPages: number;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'BloggerPage',
+    declaration: 'export interface BloggerPage<T> {\n    readonly items: T[];\n    readonly pageNo: number;\n    readonly pagesFetched: number;\n    readonly hasMore: boolean;\n}',
+  },
+  {
+    name: 'BloggerPost',
+    declaration: 'export interface BloggerPost extends BloggerPostSummary {\n    readonly bodyMarkdown: string;\n}',
+  },
+  {
+    name: 'BloggerPostSummary',
+    declaration: 'export interface BloggerPostSummary {\n    readonly id: string;\n    readonly url: string;\n    readonly title: string;\n    readonly publishedAt: string;\n    readonly replies?: number;\n    readonly views?: number;\n    readonly likes?: number;\n}',
+  },
+  {
+    name: 'BloggerRef',
+    declaration: 'export interface BloggerRef {\n    readonly source: string;\n    readonly userID: string;\n    readonly userName?: string;\n    readonly profileUrl?: string;\n}',
+  },
+  {
+    name: 'BloggerReply',
+    declaration: 'export interface BloggerReply {\n    readonly id: string;\n    readonly url: string;\n    readonly topicTitle: string;\n    readonly topicUrl: string;\n    readonly repliedAt: string;\n    readonly body: string;\n    readonly likes?: number;\n}',
+  },
+  {
+    name: 'BloggerResolution',
+    declaration: 'export interface BloggerResolution {\n    readonly source: BloggerSource;\n    readonly ref: BloggerRef;\n}',
+  },
+  {
+    name: 'BloggerSource',
+    declaration: 'export interface BloggerSource {\n    readonly id: string;\n    readonly displayName: string;\n    matches(input: string): boolean;\n    resolve(input: string, signal: AbortSignal): Promise<BloggerRef>;\n    listPosts(ref: BloggerRef, request: BloggerListRequest): Promise<BloggerPage<BloggerPostSummary>>;\n    fetchPost(ref: BloggerRef, postId: string, signal: AbortSignal): Promise<BloggerPost>;\n    listReplies(ref: BloggerRef, request: BloggerListRequest): Promise<BloggerPage<BloggerReply>>;\n}',
+  },
+  {
+    name: 'BloggerSourceInfo',
+    declaration: 'export interface BloggerSourceInfo {\n    readonly id: string;\n    readonly displayName: string;\n}',
   },
   {
     name: 'Branded',

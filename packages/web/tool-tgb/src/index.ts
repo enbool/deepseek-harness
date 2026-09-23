@@ -5,6 +5,10 @@
  * credential-reference config field resolved per call; all other limits
  * (pagination budget, timeouts, response and output caps) are deployment
  * config, never model arguments.
+ *
+ * The entry also exports the reusable tgb.cn access primitives — {@link TgbClient}
+ * and the three user-activity page parsers — so another package can read the
+ * same pages under its own model contract without duplicating the request path.
  * @module @deepseek-ai/dsh-tool-tgb
  */
 
@@ -20,7 +24,11 @@ export type {
 export { TgbError } from './errors.ts'
 export type { FollowListPage, LoginState } from './follows.ts'
 export { TgbClient } from './client.ts'
-export type { TgbClientOptions } from './client.ts'
+export type { TgbClientOptions, CollectPagesOptions } from './client.ts'
+export { parseRepliesPage } from './replies.ts'
+export { moreRepliesUrl, moreTopicUrl, topicUrl } from './sites.ts'
+export { parseTopicContentPage } from './topic-content.ts'
+export { parseTopicsPage } from './topics.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-tgb'

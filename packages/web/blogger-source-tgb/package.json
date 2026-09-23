@@ -1,0 +1,44 @@
+{
+  "name": "@deepseek-ai/dsh-blogger-source-tgb",
+  "description": "Taoguba (tgb.cn) blogger source for the DeepSeek Harness blogger seam (ctx.bloggers) — resolves a user id or /blog/ URL and collects that user's topics and replies",
+  "version": "0.1.7-alpha.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/web/blogger-source-tgb"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-blogger": "workspace:*",
+    "@deepseek-ai/dsh-credentials": "workspace:*",
+    "@deepseek-ai/dsh-tool-tgb": "workspace:*"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-blogger": "workspace:*",
+    "@deepseek-ai/dsh-credentials": "workspace:*",
+    "@deepseek-ai/dsh-tool-tgb": "workspace:*"
+  }
+}

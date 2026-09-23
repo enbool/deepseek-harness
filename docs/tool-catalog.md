@@ -45,6 +45,8 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
+| `@deepseek-ai/dsh-tool-tgb` | `tgb_get_follows`, `tgb_get_home_sections`, `tgb_get_replies`, `tgb_get_topic_content`, `tgb_get_topics` | `ctx.tools`, `ctx.credentials` | `tool/call`, `tool/result` | - | - |
+| `@deepseek-ai/dsh-tool-blogger-skill` | `blogger_build_skill`, `blogger_harvest` | `ctx.tools`, `ctx.bloggers`, `ctx.llm`, `ctx.fs` | `tool/call`, `tool/result`, `blogger/distill-request`, `a SKILL.md under the configured skill root` | - | - |
 
 <a id="deepseek-aidsh-plugin-manager"></a>
 
@@ -2514,3 +2516,219 @@ Search the web for current information. Provide 1–4 queries in the required qu
 Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps.
+
+<a id="deepseek-aidsh-tool-tgb"></a>
+
+## `@deepseek-ai/dsh-tool-tgb`
+
+### `tgb_get_follows`
+
+List one tgb.cn user's followed users (关注列表). Without userID, uses the logged-in user from the configured cookie; paginate with pageNo/maxPages.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "userID": {
+      "type": "integer",
+      "description": "The list owner's user id. The numeric tgb.cn user id (the digits in a /blog/{id} URL). Defaults to the logged-in user."
+    },
+    "pageNo": {
+      "type": "integer",
+      "description": "The 1-based page to start from. Defaults to 1."
+    },
+    "maxPages": {
+      "type": "integer",
+      "description": "How many pages to fetch in this call, starting at pageNo. Defaults to the configured budget."
+    }
+  }
+}
+```
+
+Source: [`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+### `tgb_get_home_sections`
+
+Read the tgb.cn home page's 本周上升达人 (weekly rising stars) and 热门研股 (hot research stocks) sections, optionally with realtime quotes.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "includeQuotes": {
+      "type": "boolean",
+      "description": "Set true to also fetch realtime quotes for the hot stocks. Defaults to false."
+    }
+  }
+}
+```
+
+Source: [`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+### `tgb_get_replies`
+
+List one tgb.cn user's replies (跟帖): where they replied, the reply text, and the source topic; paginate with pageNo/maxPages.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "userID": {
+      "type": "integer",
+      "description": "The numeric tgb.cn user id (the digits in a /blog/{id} URL)."
+    },
+    "pageNo": {
+      "type": "integer",
+      "description": "The 1-based page to start from. Defaults to 1."
+    },
+    "maxPages": {
+      "type": "integer",
+      "description": "How many pages to fetch in this call, starting at pageNo. Defaults to the configured budget."
+    },
+    "time": {
+      "type": "string",
+      "description": "Optional date filter, YYYY-MM-DD. Omit for all dates."
+    }
+  },
+  "required": [
+    "userID"
+  ]
+}
+```
+
+Source: [`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+### `tgb_get_topic_content`
+
+Fetch one tgb.cn topic's first post (主贴内容): metadata plus the body as markdown. Take the code from tgb_get_topics results.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "The topic's /a/ short code (letters and digits only, for example \"1ykHx9mgs4W\"). Not a URL."
+    }
+  },
+  "required": [
+    "code"
+  ]
+}
+```
+
+Source: [`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+### `tgb_get_topics`
+
+List one tgb.cn user's topics (主贴) with per-topic counters; paginate with pageNo/maxPages.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "userID": {
+      "type": "integer",
+      "description": "The numeric tgb.cn user id (the digits in a /blog/{id} URL)."
+    },
+    "pageNo": {
+      "type": "integer",
+      "description": "The 1-based page to start from. Defaults to 1."
+    },
+    "maxPages": {
+      "type": "integer",
+      "description": "How many pages to fetch in this call, starting at pageNo. Defaults to the configured budget."
+    },
+    "sortFlag": {
+      "type": "string",
+      "description": "Pass \"R\" to order by latest reply instead of the site default.",
+      "enum": [
+        "R"
+      ]
+    }
+  },
+  "required": [
+    "userID"
+  ]
+}
+```
+
+Source: [`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+<a id="deepseek-aidsh-tool-blogger-skill"></a>
+
+## `@deepseek-ai/dsh-tool-blogger-skill`
+
+### `blogger_build_skill`
+
+Distill a harvested blogger corpus into a loadable skill: reads the corpus, infers the blogger's reasoning and judgement rules, and writes a SKILL.md. Run blogger_harvest first.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": "string",
+      "description": "The same blogger id or profile page URL passed to blogger_harvest."
+    },
+    "source": {
+      "type": "string",
+      "description": "Platform source id, when the reference alone does not select one. Omit to let the reference select its own platform."
+    },
+    "skillName": {
+      "type": "string",
+      "description": "Override the generated skill name; lower-case kebab-case. Omit to use the name the model proposes."
+    }
+  },
+  "required": [
+    "user"
+  ]
+}
+```
+
+Source: [`packages/skill/tool-blogger-skill/src/index.ts`](../packages/skill/tool-blogger-skill/src/index.ts)
+
+### `blogger_harvest`
+
+Harvest a platform blogger's posts and replies into a local corpus. Pass the blogger's id or profile page URL; each call reads one page window, so pass the returned next page to continue past it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": "string",
+      "description": "The blogger's numeric id or their profile page URL on the platform, for example 905478 or https://www.tgb.cn/blog/905478."
+    },
+    "source": {
+      "type": "string",
+      "description": "Platform source id, when the reference alone does not select one. Omit to let the reference select its own platform."
+    },
+    "postStartPage": {
+      "type": "integer",
+      "description": "The 1-based post page to start from. Defaults to 1; pass the previous call's nextPostPage to continue."
+    },
+    "postPages": {
+      "type": "integer",
+      "description": "How many pages of the blogger's posts to collect this call. Defaults to the configured budget."
+    },
+    "replyStartPage": {
+      "type": "integer",
+      "description": "The 1-based reply page to start from. Defaults to 1; pass the previous call's nextReplyPage to continue."
+    },
+    "replyPages": {
+      "type": "integer",
+      "description": "How many pages of the blogger's replies to collect this call. Defaults to the configured budget."
+    },
+    "maxPosts": {
+      "type": "integer",
+      "description": "How many post bodies to fetch this call. Defaults to the configured budget."
+    }
+  },
+  "required": [
+    "user"
+  ]
+}
+```
+
+Source: [`packages/skill/tool-blogger-skill/src/index.ts`](../packages/skill/tool-blogger-skill/src/index.ts)

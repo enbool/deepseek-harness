@@ -394,6 +394,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-skill-badge` | no | Bundled dsh badge skill provider for DeepSeek Harness |
 | `@deepseek-ai/dsh-skill-filesystem` | yes | Local filesystem skill provider for the DeepSeek Harness |
 | `@deepseek-ai/dsh-skill-office` | yes | Bundled Word, PowerPoint, and Excel workflows and structural checks |
+| `@deepseek-ai/dsh-tool-blogger-skill` | yes | Model-facing tools that harvest one platform blogger's posts and replies through ctx.bloggers and distill them into a loadable SKILL.md |
 | `@deepseek-ai/dsh-tool-skill` | yes | Model-facing skill loading tool for the DeepSeek Harness |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | yes | The load_workspace_dependencies tool: absolute paths into a bundled Python, Node.js, and pnpm payload |
 
@@ -472,6 +473,9 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 
 | Package | Config | Description |
 |---|---|---|
+| `@deepseek-ai/dsh-blogger` | no | Blogger source capability seam (ctx.bloggers) for the DeepSeek Harness — platform source registry, reference resolution, and the post/reply vocabulary a source collects |
+| `@deepseek-ai/dsh-blogger-source-tgb` | yes | Taoguba (tgb.cn) blogger source for the DeepSeek Harness blogger seam (ctx.bloggers) — resolves a user id or /blog/ URL and collects that user's topics and replies |
+| `@deepseek-ai/dsh-tool-tgb` | yes | Model-facing taoguba (tgb.cn) data tools: topics, replies, follows, and home sections, over credential-bearing site access |
 | `@deepseek-ai/dsh-tool-web` | yes | Model-facing web tools (web_search, web_fetch) over the DeepSeek Harness web capability seam (ctx.web) |
 | `@deepseek-ai/dsh-web` | yes | Abstract web access capability seam (ctx.web) for the DeepSeek Harness — search/fetch provider registry, registration-order-independent selection, request/result vocabulary, and the WebError taxonomy |
 | `@deepseek-ai/dsh-web-fetch-http` | yes | Anonymous public HTTP(S) fetch provider for the DeepSeek Harness web capability seam (ctx.web) |

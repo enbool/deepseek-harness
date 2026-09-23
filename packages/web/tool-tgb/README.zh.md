@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-tool-tgb` 让模型读取淘股吧（tgb.cn）数据：用户的主贴列表、单篇主贴内容（主贴正文）、用户的跟帖、用户的关注列表，以及首页的 本周上升达人 / 热门研股 板块（可选附带实时行情）。站点登录态是每次调用时解析的凭据引用；分页预算、超时与大小上限属于部署设置而非模型参数。列表工具串行翻页，在空页、首条目重复或页数预算处停止，并报告进度供模型决定是否继续取数。
+`dsh-tool-tgb` 让模型读取淘股吧（tgb.cn）数据：用户的主贴列表、单篇主贴内容（主贴正文）、用户的跟帖、用户的关注列表，以及首页的 本周上升达人 / 热门研股 板块（可选附带实时行情）。登录态是每次调用时解析的凭据引用；分页、超时与大小上限属于部署设置而非模型参数。列表工具串行翻页，在空页、首条目重复或页数预算处停止。包入口还导出 `TgbClient`、三个页面解析器及其 URL 构造函数，供其他包使用。
 
 ## 目录
 
@@ -77,6 +77,7 @@ kind: "package-reference"
 
 - **固定的外部边界，不做开放代理。** 每个 URL 都由模块常量与经过校验的数字 id 或短码拼装；没有任何工具接受调用方提供的 URL。主机（`www.tgb.cn`、`shuo.tgb.cn`、`hq.tgb.cn`）是站点的外部规格，而非部署可调项。
 - **携带凭据的请求绝不重定向。** 唯一的请求路径使用 `redirect: 'manual'`；SSO 登录主机映射为 `TGB_AUTH_REQUIRED`（站点的 cookie 失效信号），其余一律显式失败。这与 web 包组对携带凭据请求的规则一致。
+- 不发布运行时不变式伴随包。本包不持有状态：所有工具都经由同一个客户端读取站点，该客户端的请求规则与解析器锚点由本包自身的测试覆盖。
 
 ### 源码地图
 
@@ -117,7 +118,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-五个工具：`tgb_get_topics`、`tgb_get_topic_content`、`tgb_get_replies`、`tgb_get_follows`、`tgb_get_home_sections`。数值与日期预算（`maxPages`、超时）属于部署设置；模型只传 id、短码、页码以及 schema 描述中的可选过滤参数。
+五个工具：`tgb_get_topics`、`tgb_get_topic_content`、`tgb_get_replies`、`tgb_get_follows`、`tgb_get_home_sections`。数值与日期预算（`maxPages`、超时）属于部署设置；模型只传 id、短码、页码以及 schema 描述中的可选过滤参数。完整 schema 见[生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-tgb)。
 
 #### Token 影响
 

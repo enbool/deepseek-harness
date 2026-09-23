@@ -149,7 +149,7 @@ export class TgbClient {
   async fetchJson(url: URL, signal: AbortSignal): Promise<unknown> {
     const text = await this.request(url, signal, ACCEPT_JSON)
     try {
-      return JSON.parse(text) as unknown
+      return JSON.parse(text)
     } catch (error: unknown) {
       throw new TgbError(`tgb.cn endpoint ${url.href} returned invalid JSON`, TGB_HTTP_STATUS, { cause: error })
     }

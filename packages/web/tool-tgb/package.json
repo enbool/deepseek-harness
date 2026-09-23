@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-tgb",
   "description": "Model-facing taoguba (tgb.cn) data tools: topics, replies, follows, and home sections, over credential-bearing site access",
-  "version": "0.1.6-alpha.2",
+  "version": "0.1.7-alpha.2",
   "publishConfig": {
     "access": "public"
   },
@@ -27,26 +27,27 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-credentials": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-timeout": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-credentials": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-timeout": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
   },
   "dependencies": {
+    "@deepseek-ai/schemastery": "workspace:~",
     "@joplin/turndown-plugin-gfm": "^1.0.67",
     "node-html-parser": "^7.0.1",
     "turndown": "^7.2.4"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-credentials": "workspace:^",
-    "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-scope": "workspace:^",
-    "@deepseek-ai/dsh-timeout": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^",
-    "@deepseek-ai/schemastery": "workspace:^",
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-credentials": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-scope": "workspace:*",
+    "@deepseek-ai/dsh-timeout": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~",
     "@types/turndown": "^5.0.6"
   }
 }

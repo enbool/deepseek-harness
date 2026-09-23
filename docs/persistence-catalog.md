@@ -27,6 +27,7 @@ The [format references](persistence-changes/historical-formats/README.md) cover 
 | `event:approval/policy` | event | `26718e15e7e395bce9642dba5bbe09b3b1a4ce2213d20d566cd9207d7fc5fb78` | [`{ type: "approval/policy" }`](#persistence-type-sha256-26718e15e7e395bce9642dba5bbe09b3b1a4ce2213d20d566cd9207d7fc5fb78) |
 | `event:assistant/attempt` | event | `15d5dfdd822aa35e115afd74a8982825a493880457774e6850bc1520b50875e4` | [`{ type: "assistant/attempt" }`](#persistence-type-sha256-15d5dfdd822aa35e115afd74a8982825a493880457774e6850bc1520b50875e4) |
 | `event:assistant/message` | event | `1033093edd0db80ff410e00830b523405e00bb0c7684948e531ff65095799625` | [`{ type: "assistant/message" }`](#persistence-type-sha256-1033093edd0db80ff410e00830b523405e00bb0c7684948e531ff65095799625) |
+| `event:blogger/distill-request` | event | `d7b980e2b58acdabd42156812a8f324b478323c0516c04487d452feb27088d45` | [`{ type: "blogger/distill-request" }`](#persistence-type-sha256-d7b980e2b58acdabd42156812a8f324b478323c0516c04487d452feb27088d45) |
 | `event:command/done` | event | `15196447222782e773eb943c92b18316ce96b9af0f0cfddb6e57ba8274ecc5ff` | [`{ type: "command/done" }`](#persistence-type-sha256-15196447222782e773eb943c92b18316ce96b9af0f0cfddb6e57ba8274ecc5ff) |
 | `event:command/run` | event | `37184378c6439257d105c4e2022d80fc9c3a3f7c7f6ac661b00bc9f18d871006` | [`{ type: "command/run" }`](#persistence-type-sha256-37184378c6439257d105c4e2022d80fc9c3a3f7c7f6ac661b00bc9f18d871006) |
 | `event:compaction/end` | event | `b0127044ab31a702bddfd785d345f5abd7a70876746e895ce443afa3e60ddf2d` | [`{ type: "compaction/end" }`](#persistence-type-sha256-b0127044ab31a702bddfd785d345f5abd7a70876746e895ce443afa3e60ddf2d) |
@@ -313,6 +314,19 @@ Source: [`packages/core/session/src/types.ts:355`](../packages/core/session/src/
 Types: [TokenUsage](subsystems/llm-streaming.md)
 
 Source: [`packages/core/session/src/types.ts:341`](../packages/core/session/src/types.ts)
+
+### `blogger/*`
+
+<a id="bloggerdistill-request--log-only"></a>
+
+#### `blogger/distill-request` — log-only
+
+```ts persistence-catalog
+/** Log-only pre-dispatch record of one blogger-distillation model request. */
+'blogger/distill-request': BloggerDistillRequestEventData
+```
+
+Source: [`packages/skill/tool-blogger-skill/src/profile.ts:92`](../packages/skill/tool-blogger-skill/src/profile.ts)
 
 ### `command/*`
 
@@ -1460,6 +1474,14 @@ SHA-256: `cbca49bde16b656d5b8fbe4a8a507769f7b594c6287782b809c03814941bc5e3`
 SHA-256: `254dce209e735f9cb6f6b7aec0354712b1611759ec02af4d35a96f2081e666f6`
 
 `"blocked"`
+
+<a id="persistence-type-sha256-aa7c34ca32452e0b3b06864fccae9cd17da502be8cee4d34a01bb220956b5f83"></a>
+
+### `"blogger/distill-request"`
+
+SHA-256: `aa7c34ca32452e0b3b06864fccae9cd17da502be8cee4d34a01bb220956b5f83`
+
+`"blogger/distill-request"`
 
 <a id="persistence-type-sha256-d4e4d575abeb4b72d616dc65c17ac0eaa943cc135609395044c38d5afcb10e31"></a>
 
@@ -3093,6 +3115,27 @@ Sources: [`packages/schedule/schedule/src/types.ts:29`](../packages/schedule/sch
 | `prompt` | required | `string` |
 | `scheduledAt` | required | `string` |
 
+<a id="persistence-type-sha256-cc4fa7145482720b682d33f2d418590c470109ff730fe9daa3c7f65c08055d6f"></a>
+
+<a id="persistence-type-bloggerdistillrequesteventdata"></a>
+
+<a id="persistence-type-packagesskilltool-blogger-skillsrcprofiletsbloggerdistillrequesteventdata"></a>
+
+### `BloggerDistillRequestEventData`
+
+SHA-256: `cc4fa7145482720b682d33f2d418590c470109ff730fe9daa3c7f65c08055d6f`
+
+Sources: [`packages/skill/tool-blogger-skill/src/profile.ts:74`](../packages/skill/tool-blogger-skill/src/profile.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `maxTokens` | required | `number` |
+| `messages` | required | [`RequestMessage[]`](#persistence-type-sha256-535c0e83bf4890f5ddd0d2ea9be19b056cd0e446fb3eb2bc2de80acdd7174d52) |
+| `route` | required | [`SessionTitleModelIdentity`](#persistence-type-sha256-07e1a58c58b593f507b8e7f25723bb0aa42baae6e00f5ecfddf28cb1e64d3235) |
+| `source` | required | `string` |
+| `system` | required | `string` |
+| `userID` | required | `string` |
+
 <a id="persistence-type-sha256-ada310bf0bdb8fed51f3b56ea63f6ea6b18bbd587f04fccb63a14ab0b2a24e05"></a>
 
 <a id="persistence-type-commandsource"></a>
@@ -4276,6 +4319,52 @@ One of:
 - `"resume"`
 - `"series"`
 
+<a id="persistence-type-sha256-c394e980447e7dc988acba8d21a24cc0f606960cead4f69ddd8e8d09633ceed3"></a>
+
+<a id="persistence-type-packagesllmllmsrctypestsrequestmessage"></a>
+
+<a id="persistence-type-requestmessage"></a>
+
+### `RequestMessage`
+
+SHA-256: `c394e980447e7dc988acba8d21a24cc0f606960cead4f69ddd8e8d09633ceed3`
+
+Sources: [`packages/llm/llm/src/types.ts:483`](../packages/llm/llm/src/types.ts)
+
+One of:
+
+- [`ToolResultMessage`](#persistence-type-sha256-4b259f7f8f0a44ad5e90b70a73553ced1df27012d126921d397ff403b6c86731)
+- [`DeveloperMessage`](#persistence-type-sha256-f61313bd96ed95b72eb16a4a5a77ad94a0da1756d428d3d660ff6e23c9e6342b)
+- [`UserMessage`](#persistence-type-sha256-64ea5653002834c44f29bea4620e9c42aeb6024ae5b1d58d69f95158006b2586)
+- [`AssistantMessage`](#persistence-type-sha256-fa87537f4a9c1e25602990a8bf686b383e9e00352ec8946e16ae24ba7c1625be)
+- [`SystemMessage`](#persistence-type-sha256-09f3f8dc417f278257202714132f98ba7b52957d7b558c4a04456603890eb363)
+- [`RequestUserInput`](#persistence-type-sha256-34781a31fba38f2732d53fbd976f7981f51edc540d48048a0f84c2446c394cd1)
+
+<a id="persistence-type-sha256-535c0e83bf4890f5ddd0d2ea9be19b056cd0e446fb3eb2bc2de80acdd7174d52"></a>
+
+### `RequestMessage[]`
+
+SHA-256: `535c0e83bf4890f5ddd0d2ea9be19b056cd0e446fb3eb2bc2de80acdd7174d52`
+
+Array of [`RequestMessage`](#persistence-type-sha256-c394e980447e7dc988acba8d21a24cc0f606960cead4f69ddd8e8d09633ceed3).
+
+<a id="persistence-type-sha256-34781a31fba38f2732d53fbd976f7981f51edc540d48048a0f84c2446c394cd1"></a>
+
+<a id="persistence-type-packagesllmllmsrctypestsrequestuserinput"></a>
+
+<a id="persistence-type-requestuserinput"></a>
+
+### `RequestUserInput`
+
+SHA-256: `34781a31fba38f2732d53fbd976f7981f51edc540d48048a0f84c2446c394cd1`
+
+Sources: [`packages/llm/llm/src/types.ts:475`](../packages/llm/llm/src/types.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `content` | required | [`ContentBlock[]`](#persistence-type-sha256-b52f215a6cd691058a3413c12f161fa3b563a2f4895adb3df6f744ec4b0a6ef1) |
+| `role` | required | `"user"` |
+
 <a id="persistence-type-sha256-fab2bb09bc5e3b9db0685e8f5500b029af1a2b33e70bc703c1d5d0f596fbc1fd"></a>
 
 <a id="persistence-type-packagessandboxsandboxsrcindextssandboxmode"></a>
@@ -4453,7 +4542,11 @@ Sources: [`packages/session/session-title-llm/src/index.ts:34`](../packages/sess
 
 <a id="persistence-type-allowedmodelroute"></a>
 
+<a id="persistence-type-modelroute"></a>
+
 <a id="persistence-type-packagessessionsession-titlesrctypestssessiontitlemodelidentity"></a>
+
+<a id="persistence-type-packagesskilltool-blogger-skillsrcprofiletsmodelroute"></a>
 
 <a id="persistence-type-packagessubagenttool-subagentsrcmodel-selectiontsallowedmodelroute"></a>
 
@@ -4463,7 +4556,7 @@ Sources: [`packages/session/session-title-llm/src/index.ts:34`](../packages/sess
 
 SHA-256: `07e1a58c58b593f507b8e7f25723bb0aa42baae6e00f5ecfddf28cb1e64d3235`
 
-Sources: [`packages/session/session-title/src/types.ts:20`](../packages/session/session-title/src/types.ts) · [`packages/subagent/tool-subagent/src/model-selection.ts:9`](../packages/subagent/tool-subagent/src/model-selection.ts)
+Sources: [`packages/session/session-title/src/types.ts:20`](../packages/session/session-title/src/types.ts) · [`packages/skill/tool-blogger-skill/src/profile.ts:23`](../packages/skill/tool-blogger-skill/src/profile.ts) · [`packages/subagent/tool-subagent/src/model-selection.ts:9`](../packages/subagent/tool-subagent/src/model-selection.ts)
 
 | Property | Presence | Type |
 |---|---|---|
@@ -7733,6 +7826,22 @@ Sources: [`packages/llm/llm/src/types.ts:441`](../packages/llm/llm/src/types.ts)
 | `blockType` | required | [`ContentBlockType`](#persistence-type-sha256-7d65acf0a3a43a8f445ce5d3320b42eca492739fc931b2a7516bfb8368dc2c68) |
 | `index` | required | `number` |
 | `type` | required | `"block-start"` |
+
+<a id="persistence-type-sha256-d7b980e2b58acdabd42156812a8f324b478323c0516c04487d452feb27088d45"></a>
+
+<a id="persistence-type-eventbloggerdistill-request"></a>
+
+### `{ type: "blogger/distill-request" }`
+
+SHA-256: `d7b980e2b58acdabd42156812a8f324b478323c0516c04487d452feb27088d45`
+
+| Property | Presence | Type |
+|---|---|---|
+| `data` | required | [`BloggerDistillRequestEventData`](#persistence-type-sha256-cc4fa7145482720b682d33f2d418590c470109ff730fe9daa3c7f65c08055d6f) |
+| `ignorable` | optional | `true` |
+| `seq` | required | `number` |
+| `time` | required | `number` |
+| `type` | required | `"blogger/distill-request"` |
 
 <a id="persistence-type-sha256-487b65c37bfedb8b72088c4107a0a90a6249701f6b26745f6d98f9b8a22b07c7"></a>
 

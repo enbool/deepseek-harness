@@ -66,6 +66,7 @@ flowchart TD
     pkg_skill_badge["skill-badge"]
     pkg_skill_filesystem["skill-filesystem"]
     pkg_skill_office["skill-office"]
+    pkg_tool_blogger_skill["tool-blogger-skill"]
     pkg_tool_skill["tool-skill"]
     pkg_tool_workspace_dependencies["tool-workspace-dependencies"]
   end
@@ -82,6 +83,8 @@ flowchart TD
     pkg_tool_subagent_control["tool-subagent-control"]
   end
   subgraph group_web["packages/web"]
+    pkg_blogger["blogger"]
+    pkg_blogger_source_tgb["blogger-source-tgb"]
     pkg_tool_tgb["tool-tgb"]
     pkg_tool_web["tool-web"]
     pkg_web["web"]
@@ -426,6 +429,7 @@ flowchart TD
     pkg_workspace["workspace"]
   end
   pkg_scope --> pkg_invariants
+  pkg_blogger --> pkg_llm
   pkg_web --> pkg_llm
   pkg_attachment --> pkg_brand
   pkg_browser_use --> pkg_brand
@@ -800,6 +804,14 @@ flowchart TD
   pkg_tool_str_replace_editor --> pkg_sandbox
   pkg_tool_str_replace_editor --> pkg_sandbox_policy
   pkg_tool_str_replace_editor --> pkg_tools
+  pkg_tool_blogger_skill --> pkg_agent
+  pkg_tool_blogger_skill --> pkg_blogger
+  pkg_tool_blogger_skill --> pkg_fs
+  pkg_tool_blogger_skill --> pkg_llm
+  pkg_tool_blogger_skill --> pkg_session
+  pkg_tool_blogger_skill --> pkg_skill
+  pkg_tool_blogger_skill --> pkg_tools
+  pkg_tool_blogger_skill --> pkg_util_values
   pkg_tool_skill --> pkg_agent
   pkg_tool_skill --> pkg_llm
   pkg_tool_skill --> pkg_skill
@@ -993,6 +1005,9 @@ flowchart TD
   pkg_token_meter --> pkg_llm_retry
   pkg_token_meter --> pkg_session
   pkg_token_meter --> pkg_session_projection
+  pkg_blogger_source_tgb --> pkg_blogger
+  pkg_blogger_source_tgb --> pkg_credentials
+  pkg_blogger_source_tgb --> pkg_tool_tgb
   pkg_session_query --> pkg_brand
   pkg_session_query --> pkg_llm
   pkg_session_query --> pkg_session
@@ -1460,6 +1475,7 @@ flowchart TD
 | [`typert-protocol`](../packages/typert/protocol) | `typert` | — |
 | [`typert-registry`](../packages/typert/registry) | `typert` | — |
 | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`blogger`](../packages/web/blogger) | `web` | [`llm`](../packages/llm/llm) |
 | [`web`](../packages/web/web) | `web` | [`llm`](../packages/llm/llm) |
 | [`attachment`](../packages/attachment/attachment) | `attachment` | [`brand`](../packages/util/brand) |
 | [`browser-use`](../packages/browser-use/browser-use) | `browser-use` | [`brand`](../packages/util/brand) |
@@ -1573,6 +1589,7 @@ flowchart TD
 | [`tool-fs`](../packages/fs/tool-fs) | `fs` | [`attachment`](../packages/attachment/attachment), [`fs`](../packages/fs/fs), [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`user-approval`](../packages/interaction/user-approval) |
 | [`tool-fs-search`](../packages/fs/tool-fs-search) | `fs` | [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`session`](../packages/core/session), [`spill`](../packages/spill/spill), [`subprocess`](../packages/subprocess/subprocess), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
 | [`tool-str-replace-editor`](../packages/fs/tool-str-replace-editor) | `fs` | [`fs`](../packages/fs/fs), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`tools`](../packages/core/tools) |
+| [`tool-blogger-skill`](../packages/skill/tool-blogger-skill) | `skill` | [`agent`](../packages/core/agent), [`blogger`](../packages/web/blogger), [`fs`](../packages/fs/fs), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`skill`](../packages/skill/skill), [`tools`](../packages/core/tools), [`util-values`](../packages/util/values) |
 | [`tool-skill`](../packages/skill/tool-skill) | `skill` | [`agent`](../packages/core/agent), [`llm`](../packages/llm/llm), [`skill`](../packages/skill/skill), [`tools`](../packages/core/tools) |
 | [`tool-workspace-dependencies`](../packages/skill/tool-workspace-dependencies) | `skill` | [`tools`](../packages/core/tools) |
 | [`tool-tgb`](../packages/web/tool-tgb) | `web` | [`credentials`](../packages/credentials/credentials), [`llm`](../packages/llm/llm), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
@@ -1612,6 +1629,7 @@ flowchart TD
 | [`tool-workflow`](../packages/workflow/tool-workflow) | `workflow` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow) |
 | [`plugin-package-inventory-deepseek`](../packages/llm/plugin-package-inventory-deepseek) | `llm` | [`agent`](../packages/core/agent), [`agent-preset-registry`](../packages/preset/agent-preset-registry), [`deepseek-llm-api-extensions`](../packages/llm/deepseek-llm-api-extensions), [`session`](../packages/core/session) |
 | [`token-meter`](../packages/llm/token-meter) | `llm` | [`compaction`](../packages/compaction/compaction), [`compaction-image-offload`](../packages/compaction/compaction-image-offload), [`llm`](../packages/llm/llm), [`llm-retry`](../packages/llm/llm-retry), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection) |
+| [`blogger-source-tgb`](../packages/web/blogger-source-tgb) | `web` | [`blogger`](../packages/web/blogger), [`credentials`](../packages/credentials/credentials), [`tool-tgb`](../packages/web/tool-tgb) |
 | [`session-query`](../packages/session-query/session-query) | `session-query` | [`brand`](../packages/util/brand), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`session-projection`](../packages/session/session-projection), [`session-projection-cache`](../packages/session/session-projection-cache), [`session-title`](../packages/session/session-title), [`tool-todo`](../packages/todo/tool-todo) |
 | [`api-settings-controller`](../packages/api/settings-controller) | `api` | [`agent-preset-registry`](../packages/preset/agent-preset-registry), [`credentials`](../packages/credentials/credentials), [`native-command`](../packages/util/native-command), [`session`](../packages/core/session), [`settings`](../packages/settings/settings), [`typert-protocol`](../packages/typert/protocol) |
 | [`web-app`](../packages/bundle/web-app) | `bundle` | [`shell-env`](../packages/shell/shell-env), [`system-prompt`](../packages/core/system-prompt) |

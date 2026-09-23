@@ -134,6 +134,14 @@ HTTP 提供方会解析每个实际请求，拒绝包括通过当前 DNS64 前�
 
 `WebError extends HarnessError`（[core.md](core.zh.md) 错误分类体系），带有 `code: string`（开放式，与其他 seam 的错误一致——`LlmError`、`SubagentError`），而非封闭联合类型：提供方可以在不修改 `dsh-web` 的情况下抛出自己的错误代码，消费方必须容忍未知错误代码。错误代码按所有者划分。共享的 `WebRuntime` 约定会抛出与 seam 无关的错误代码：`WEB_PROVIDER_UNAVAILABLE`、`WEB_PROVIDER_CONFIGURED_MISSING`、`WEB_PROVIDER_CONFIGURED_UNAVAILABLE`、`WEB_PROVIDER_AMBIGUOUS`、`WEB_DUPLICATE_PROVIDER`（注册时的编程错误，类似 `LlmRuntime` 的 `DUPLICATE_ADAPTER`）、`WEB_ABORTED`，以及 `WEB_PROVIDER_ERROR`（提供方自身故障经 seam 暴露时使用的兜底代码，包括 DNS、连接被拒绝、TLS 等网络或传输故障）。抓取传输层错误代码由 `dsh-web-fetch-http` 实现拥有，不同的抓取后端无需抛出它们：`WEB_INVALID_URL`、`WEB_BLOCKED_URL`、`WEB_REDIRECT_BLOCKED`、`WEB_FETCH_TOO_LARGE`、`WEB_FETCH_TIMEOUT`、`WEB_UNSUPPORTED_CONTENT_TYPE`。
 
+## 博客源
+
+`ctx.bloggers` 是用于读取论坛平台上指定博主的同级能力。`ctx.web` 抓取任意 URL，而此 seam 回答的是某个用户是谁、写了什么：平台包注册一个 `BloggerSource`，消费方把用户 ID 或主页 URL 解析为 `BloggerRef`，再通过同一对象采集该博主的主贴与跟帖。
+
+`BloggerSource` 是提供方契约。`matches(input)` 是纯语法判断；`resolve(input, signal)` 把 `matches` 接受的引用规范化；`listPosts` 与 `listReplies` 各返回一段有界的 `BloggerPage`；`fetchPost` 按同一源上报的 ID 返回一篇主贴正文的 markdown。`BloggerSourceInfo` 是注册表的发现记录——一个 ID 加一个显示名——`BloggerResolution` 则把识别出该引用的源与其解析出的身份配对。
+
+解析从不依赖注册顺序：恰好一个源匹配时由其解析，没有匹配则抛 `BLOGGER_SOURCE_UNRECOGNIZED`，多个匹配则抛 `BLOGGER_SOURCE_AMBIGUOUS` 并列出候选，供调用方指定其一。若要求某个源解析其自身语法拒绝的引用，会抛 `BLOGGER_REFERENCE_INVALID`；重复注册则抛 `BLOGGER_SOURCE_DUPLICATE`。平台自身的失败沿用其原有分类：随包提供的淘股吧提供方抛出带 `TGB_*` 错误码的 `TgbError`。
+
 ## 服务
 
 `WebRuntime` 注册搜索与抓取提供方，以 `WEB_DUPLICATE_PROVIDER` 拒绝重复 id，并在执行时以结构化的选择错误解析提供方。本地抓取后端仅接受 HTTP(S)、拒绝凭证、对每个 hostname 只解析一次、拒绝包含任一非公开 IPv4／IPv6 目的地址或经当前前缀转换到非公开 IPv4 的 NAT64 地址的解析结果、把请求连接固定到已验证地址、对每一次同源重定向跳转重复这些校验、限制重定向次数、字节数、字符数和时间，并解码正文；展示由工具负责。
@@ -145,6 +153,59 @@ HTTP 提供方会解析每个实际请求，拒绝包括通过当前 DNS64 前�
 ## Cordis API
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxbloggers--bloggersourceregistry"></a>
+
+### `ctx.bloggers` — `BloggerSourceRegistry`
+
+The blogger source registry, registered as `ctx.bloggers` (one instance per context). It owns the set of platform sources, their ids, and their lifetime.
+
+```ts cordis-catalog
+/**
+ * Register one platform source. Throws {@link BloggerError}
+ * `BLOGGER_SOURCE_DUPLICATE` when its id is already registered.
+ *
+ * @param source - the source; its `id` is the registry key.
+ * @returns the disposer that unregisters the source.
+ */
+register(source: BloggerSource): () => void
+
+/**
+ * Report every registered source for discovery.
+ *
+ * @returns one entry per registered source, in registration order.
+ */
+list(): BloggerSourceInfo[]
+
+/**
+ * Look up one source by id.
+ *
+ * @param id - the source id to look up.
+ * @returns the source, or `undefined` when no source carries that id.
+ */
+get(id: string): BloggerSource | undefined
+
+/**
+ * Resolve one source by id, failing loud when it is absent.
+ *
+ * @param id - the source id a caller named explicitly.
+ * @returns the registered source.
+ */
+require(id: string): BloggerSource
+
+/**
+ * Resolve a user's id-or-homepage reference to one source's identity. Exactly
+ * one registered source must recognize the reference; none, or more than one,
+ * fails with the matching {@link BloggerError} code.
+ *
+ * @param input - the caller's raw user reference.
+ * @param signal - cancellation signal forwarded to the resolving source.
+ * @returns the recognizing source and the identity it resolved.
+ */
+async resolve(input: string, signal: AbortSignal): Promise<BloggerResolution>
+```
+
+Source: [`packages/web/blogger/src/index.ts`](../../packages/web/blogger/src/index.ts)
 
 <a id="ctxweb--webruntime"></a>
 

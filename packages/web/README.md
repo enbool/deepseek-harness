@@ -22,7 +22,7 @@ The `web/` packages let models search the public web and fetch HTTP(S) pages thr
 <a id="packages"></a>
 ## Packages
 
-Seven packages play the web roles; the subsystem reference owns the exhaustive vocabulary and contracts.
+Nine packages play the web roles; the subsystem reference owns the exhaustive vocabulary and contracts.
 
 | Package | Role | ctx key |
 |---|---|---|
@@ -33,6 +33,8 @@ Seven packages play the web roles; the subsystem reference owns the exhaustive v
 | [`web-fetch-http/`](web-fetch-http/README.md) | Fetches public HTTP(S) pages anonymously | registers on `ctx.web` |
 | [`tool-web/`](tool-web/README.md) | Exposes `web_search` and `web_fetch` to the model | registers on `ctx.tools` |
 | [`tool-tgb/`](tool-tgb/README.md) | Exposes read-only taoguba (tgb.cn) data tools to the model | registers on `ctx.tools` |
+| [`blogger/`](blogger/README.md) | Blogger source service: the platform contract for reading one named blogger's posts and replies | `ctx.bloggers` |
+| [`blogger-source-tgb/`](blogger-source-tgb/README.md) | Reads taoguba (tgb.cn) bloggers through the blogger source seam | registers on `ctx.bloggers` |
 
 -----
 

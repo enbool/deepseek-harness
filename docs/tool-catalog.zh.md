@@ -49,6 +49,8 @@
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
+| `@deepseek-ai/dsh-tool-tgb` | `tgb_get_follows`、`tgb_get_home_sections`、`tgb_get_replies`、`tgb_get_topic_content`、`tgb_get_topics` | `ctx.tools`、`ctx.credentials` | `tool/call`、`tool/result` | - | - |
+| `@deepseek-ai/dsh-tool-blogger-skill` | `blogger_build_skill`、`blogger_harvest` | `ctx.tools`、`ctx.bloggers`、`ctx.llm`、`ctx.fs` | `tool/call`、`tool/result`、`blogger/distill-request`、`配置的 skill 根目录下的一个 SKILL.md` | - | - |
 
 <a id="deepseek-aidsh-plugin-manager"></a>
 
@@ -2522,3 +2524,219 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
 来源：[`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。
+
+<a id="deepseek-aidsh-tool-tgb"></a>
+
+## `@deepseek-ai/dsh-tool-tgb`
+
+### `tgb_get_follows`
+
+列出某个 tgb.cn 用户的关注列表。不提供 userID 时，使用所配置 cookie 中已登录的用户；用 pageNo／maxPages 分页。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "userID": {
+      "type": "integer",
+      "description": "The list owner's user id. The numeric tgb.cn user id (the digits in a /blog/{id} URL). Defaults to the logged-in user."
+    },
+    "pageNo": {
+      "type": "integer",
+      "description": "The 1-based page to start from. Defaults to 1."
+    },
+    "maxPages": {
+      "type": "integer",
+      "description": "How many pages to fetch in this call, starting at pageNo. Defaults to the configured budget."
+    }
+  }
+}
+```
+
+来源：[`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+### `tgb_get_home_sections`
+
+读取 tgb.cn 首页的本周上升达人与热门研股版块，可选同时获取实时行情。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "includeQuotes": {
+      "type": "boolean",
+      "description": "Set true to also fetch realtime quotes for the hot stocks. Defaults to false."
+    }
+  }
+}
+```
+
+来源：[`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+### `tgb_get_replies`
+
+列出某个 tgb.cn 用户的跟帖：回复的位置、回复文本和来源主贴；用 pageNo／maxPages 分页。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "userID": {
+      "type": "integer",
+      "description": "The numeric tgb.cn user id (the digits in a /blog/{id} URL)."
+    },
+    "pageNo": {
+      "type": "integer",
+      "description": "The 1-based page to start from. Defaults to 1."
+    },
+    "maxPages": {
+      "type": "integer",
+      "description": "How many pages to fetch in this call, starting at pageNo. Defaults to the configured budget."
+    },
+    "time": {
+      "type": "string",
+      "description": "Optional date filter, YYYY-MM-DD. Omit for all dates."
+    }
+  },
+  "required": [
+    "userID"
+  ]
+}
+```
+
+来源：[`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+### `tgb_get_topic_content`
+
+获取某个 tgb.cn 主贴的首帖内容：元数据以及 markdown 格式的正文。code 取自 tgb_get_topics 的结果。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "The topic's /a/ short code (letters and digits only, for example \"1ykHx9mgs4W\"). Not a URL."
+    }
+  },
+  "required": [
+    "code"
+  ]
+}
+```
+
+来源：[`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+### `tgb_get_topics`
+
+列出某个 tgb.cn 用户的主贴及每个主贴的计数；用 pageNo／maxPages 分页。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "userID": {
+      "type": "integer",
+      "description": "The numeric tgb.cn user id (the digits in a /blog/{id} URL)."
+    },
+    "pageNo": {
+      "type": "integer",
+      "description": "The 1-based page to start from. Defaults to 1."
+    },
+    "maxPages": {
+      "type": "integer",
+      "description": "How many pages to fetch in this call, starting at pageNo. Defaults to the configured budget."
+    },
+    "sortFlag": {
+      "type": "string",
+      "description": "Pass \"R\" to order by latest reply instead of the site default.",
+      "enum": [
+        "R"
+      ]
+    }
+  },
+  "required": [
+    "userID"
+  ]
+}
+```
+
+来源：[`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/index.ts)
+
+<a id="deepseek-aidsh-tool-blogger-skill"></a>
+
+## `@deepseek-ai/dsh-tool-blogger-skill`
+
+### `blogger_build_skill`
+
+将已采集的博主语料蒸馏为可加载的 skill：读取语料，推断博主的推理与判断规则，并写出 SKILL.md。请先运行 blogger_harvest。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": "string",
+      "description": "The same blogger id or profile page URL passed to blogger_harvest."
+    },
+    "source": {
+      "type": "string",
+      "description": "Platform source id, when the reference alone does not select one. Omit to let the reference select its own platform."
+    },
+    "skillName": {
+      "type": "string",
+      "description": "Override the generated skill name; lower-case kebab-case. Omit to use the name the model proposes."
+    }
+  },
+  "required": [
+    "user"
+  ]
+}
+```
+
+来源：[`packages/skill/tool-blogger-skill/src/index.ts`](../packages/skill/tool-blogger-skill/src/index.ts)
+
+### `blogger_harvest`
+
+将平台上某位博主的帖子与回复采集为本地语料。传入博主的 id 或主页 URL；每次调用只读取一段页窗口，因此要接着上次的位置继续，请传入返回值中给出的下一页。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "user": {
+      "type": "string",
+      "description": "The blogger's numeric id or their profile page URL on the platform, for example 905478 or https://www.tgb.cn/blog/905478."
+    },
+    "source": {
+      "type": "string",
+      "description": "Platform source id, when the reference alone does not select one. Omit to let the reference select its own platform."
+    },
+    "postStartPage": {
+      "type": "integer",
+      "description": "The 1-based post page to start from. Defaults to 1; pass the previous call's nextPostPage to continue."
+    },
+    "postPages": {
+      "type": "integer",
+      "description": "How many pages of the blogger's posts to collect this call. Defaults to the configured budget."
+    },
+    "replyStartPage": {
+      "type": "integer",
+      "description": "The 1-based reply page to start from. Defaults to 1; pass the previous call's nextReplyPage to continue."
+    },
+    "replyPages": {
+      "type": "integer",
+      "description": "How many pages of the blogger's replies to collect this call. Defaults to the configured budget."
+    },
+    "maxPosts": {
+      "type": "integer",
+      "description": "How many post bodies to fetch this call. Defaults to the configured budget."
+    }
+  },
+  "required": [
+    "user"
+  ]
+}
+```
+
+来源：[`packages/skill/tool-blogger-skill/src/index.ts`](../packages/skill/tool-blogger-skill/src/index.ts)

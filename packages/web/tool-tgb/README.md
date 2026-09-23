@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-tool-tgb` lets models read taoguba (tgb.cn) data: a user's topic list (主贴), one topic's first post (主贴内容), a user's replies (跟帖), a user's followed users (关注列表), and the home page's 本周上升达人 / 热门研股 sections, optionally with realtime quotes. The site login state is a credential reference resolved per call; pagination budgets, timeouts, and size caps are deployment settings rather than model arguments. List tools paginate serially and stop on an empty page, a repeated first item, or the page budget, and report progress so the model can decide whether to fetch more.
+`dsh-tool-tgb` lets models read taoguba (tgb.cn) data: a user's topic list (主贴), one topic's first post (主贴内容), a user's replies (跟帖), a user's followed users (关注列表), and the home page's 本周上升达人 / 热门研股 sections, optionally with realtime quotes. Login state is a credential reference resolved per call; pagination, timeout, and size caps are deployment settings, not model arguments. List tools paginate serially and stop on an empty page, a repeated first item, or the page budget. The entry also exports `TgbClient`, the three page parsers, and their URL builders for other packages' use.
 
 ## Table of Contents
 
@@ -77,6 +77,7 @@ Paginated tools return `{ pagesFetched, hasMore, … }`. When `hasMore` is true,
 
 - **Fixed external surface, no open proxy.** Every URL is built from module constants and validated numeric ids or short codes; no tool accepts a caller-supplied URL. The hosts (`www.tgb.cn`, `shuo.tgb.cn`, `hq.tgb.cn`) are the site's external specification, not deployment tunables.
 - **Credential-bearing requests never redirect.** One fetch path uses `redirect: 'manual'`; the SSO login host maps to `TGB_AUTH_REQUIRED` (the site's cookie-expired signal) and everything else fails loud. This matches the web package group rule for credential-bearing requests.
+- No invariant companion is published. The package owns no state: every tool reads the site through one client whose request rules and parser anchors the package's own tests cover.
 
 ### Source map
 
@@ -117,7 +118,7 @@ The topic page's first-post block is stripped of the site's player and vote scaf
 
 #### What the model sees
 
-Five tools: `tgb_get_topics`, `tgb_get_topic_content`, `tgb_get_replies`, `tgb_get_follows`, `tgb_get_home_sections`. Numeric and date budgets (`maxPages`, timeouts) are deployment settings; the model only ever passes ids, short codes, page numbers, and the optional filters described in the schemas.
+Five tools: `tgb_get_topics`, `tgb_get_topic_content`, `tgb_get_replies`, `tgb_get_follows`, `tgb_get_home_sections`. Numeric and date budgets (`maxPages`, timeouts) are deployment settings; the model only ever passes ids, short codes, page numbers, and the optional filters described in the schemas. The complete schemas are in the [generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-tgb).
 
 #### Token effect
 

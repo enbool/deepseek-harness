@@ -22,7 +22,7 @@ kind: "package-group"
 <a id="packages"></a>
 ## 包
 
-七个包分别承担 web 角色；完整词汇与约定以子系统参考文档为准。
+九个包分别承担 web 角色；完整词汇与约定以子系统参考文档为准。
 
 | 包 | 职责 | ctx 键 |
 |---|---|---|
@@ -33,6 +33,8 @@ kind: "package-group"
 | [`web-fetch-http/`](web-fetch-http/README.zh.md) | 匿名抓取公共 HTTP(S) 页面 | 注册到 `ctx.web` |
 | [`tool-web/`](tool-web/README.zh.md) | 向模型公开 `web_search` 与 `web_fetch` | 注册到 `ctx.tools` |
 | [`tool-tgb/`](tool-tgb/README.zh.md) | 向模型公开只读的淘股吧（tgb.cn）数据工具 | 注册到 `ctx.tools` |
+| [`blogger/`](blogger/README.zh.md) | 博客源服务：读取指定博主主贴与跟帖的平台契约 | `ctx.bloggers` |
+| [`blogger-source-tgb/`](blogger-source-tgb/README.zh.md) | 经博客源接缝读取淘股吧（tgb.cn）博主 | 注册到 `ctx.bloggers` |
 
 -----
 

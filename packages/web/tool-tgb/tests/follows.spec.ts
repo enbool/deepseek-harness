@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { parseFollowsPage, parseLoginState } from '../src/follows.ts'
 import { expectTgbError } from './helpers.ts'
 
-const fixture = JSON.parse(readFileSync(fileURLToPath(new URL('./fixtures/follows.json', import.meta.url)), 'utf8')) as unknown
+const fixture: unknown = JSON.parse(readFileSync(fileURLToPath(new URL('./fixtures/follows.json', import.meta.url)), 'utf8'))
 
 describe('parseFollowsPage over the recorded fixture', () => {
   const page = parseFollowsPage(fixture)
