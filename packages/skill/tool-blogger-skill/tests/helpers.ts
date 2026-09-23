@@ -18,6 +18,7 @@ import type {
 } from '@deepseek-ai/dsh-blogger'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
+import { EVIDENCE_MARKER, PROCEDURE_MARKER } from '../src/profile.ts'
 
 /** Build a text-only response stream. */
 export function textResponse(text: string): StreamChunk[] {
@@ -130,15 +131,25 @@ export const STUB_REPLIES: BloggerReply[] = [
   },
 ]
 
-/** A JSON answer in the distillation grammar. */
-export function profileAnswer(overrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    name: 'stub-blogger-buy-the-dip',
-    description: 'Consult when judging a stub blogger\'s dip-buying rules.',
-    skill: '## When this applies\n\n- In a falling market with volume.\n\n## Rules\n\n- Wait for volume before buying.',
-    portrait: '## Worldview\n\n- The blogger buys dips on volume.',
-    ...overrides,
-  })
+/** One distillation answer in the response grammar: a JSON header, then two marked sections. */
+export function profileAnswer(overrides: {
+  name?: unknown
+  description?: unknown
+  skill?: string
+  portrait?: string
+} = {}): string {
+  const { skill, portrait, ...header } = overrides
+  return [
+    JSON.stringify({
+      name: 'stub-blogger-buy-the-dip',
+      description: 'Consult when judging a stub blogger\'s dip-buying rules.',
+      ...header,
+    }),
+    PROCEDURE_MARKER,
+    skill ?? '## When this applies\n\n- In a falling market with volume.\n\n## Rules\n\n- Wait for volume before buying.',
+    EVIDENCE_MARKER,
+    portrait ?? '## Worldview\n\n- The blogger buys dips on volume.',
+  ].join('\n')
 }
 
 /** One temp directory removed by the caller. */

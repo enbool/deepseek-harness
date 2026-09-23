@@ -137,26 +137,38 @@ describe('parseProfile', () => {
       portrait: '## Worldview\n\n- The blogger buys dips on volume.',
     })
   })
-
   it('parses an answer wrapped in prose and a code fence', () => {
     expect(parseProfile(`Here it is:\n\`\`\`json\n${profileAnswer()}\n\`\`\`\n`).name).toBe('stub-blogger-buy-the-dip')
   })
 
+  it('strips a fence the model wrapped around a document anyway', () => {
+    const answer = profileAnswer({
+      skill: '```markdown\n## Rules\n\n- Act.\n```',
+      portrait: '```markdown\n## Worldview\n\n- Evidence.\n```',
+    })
+    expect(parseProfile(answer)).toMatchObject({ skill: '## Rules\n\n- Act.', portrait: '## Worldview\n\n- Evidence.' })
+  })
+
   it.each([
-    ['no JSON object at all', 'I cannot answer that.', /carried no JSON object/],
-    ['a truncated object', '{"name":"x"', /carried no JSON object/],
-    ['invalid JSON', '{not json}', /did not parse/],
+    ['no JSON header at all', 'I cannot answer that.', /did not begin with the JSON header object/],
+    ['an unterminated header', '{"name":"x"', /did not begin with the JSON header object/],
+    ['an invalid header', '{not json}\n<<<DSH:PROCEDURE>>>\nx\n<<<DSH:EVIDENCE>>>\ny', /JSON header did not parse/],
     ['a non-kebab-case name', profileAnswer({ name: 'Stub Blogger' }), /kebab-case skill name/],
     ['a missing name', profileAnswer({ name: 5 }), /kebab-case skill name/],
-    ['an empty description', profileAnswer({ description: '   ' }), /no "description" string/],
-    ['a non-string description', profileAnswer({ description: 5 }), /no "description" string/],
-    ['an empty skill', profileAnswer({ skill: '  ' }), /no "skill" string/],
-    ['a non-string skill', profileAnswer({ skill: 5 }), /no "skill" string/],
-    ['an empty portrait', profileAnswer({ portrait: '  ' }), /no "portrait" string/],
-    ['a non-string portrait', profileAnswer({ portrait: 5 }), /no "portrait" string/],
+    ['an empty description', profileAnswer({ description: '   ' }), /header carried no "description" string/],
+    ['a non-string description', profileAnswer({ description: 5 }), /header carried no "description" string/],
+    ['no procedure marker', '{"name":"stub-blogger","description":"d"}\nno marker here', /carried no <<<DSH:PROCEDURE>>> line/],
+    ['no evidence marker', '{"name":"stub-blogger","description":"d"}\n<<<DSH:PROCEDURE>>>\nbody', /carried no <<<DSH:EVIDENCE>>> line/],
+    ['an empty procedure', profileAnswer({ skill: '   ' }), /empty operating procedure/],
+    ['an empty portrait', profileAnswer({ portrait: '   ' }), /empty evidence portrait/],
   ])('rejects %s', (_label, answer, expected) => {
     expect(() => parseProfile(answer))
       .toThrow(expect.objectContaining({ code: 'BLOGGER_PROFILE_INVALID', message: expect.stringMatching(expected) as string }))
+  })
+
+  it('quotes the answer that failed so the model can see what it wrote', () => {
+    expect(() => parseProfile('I cannot answer that.'))
+      .toThrow(expect.objectContaining({ message: expect.stringContaining('the answer began: "I cannot answer that."') as string }))
   })
 })
 

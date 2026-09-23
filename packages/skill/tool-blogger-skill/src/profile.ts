@@ -94,10 +94,20 @@ declare module '@deepseek-ai/dsh-session/types' {
 }
 
 /**
+ * The line separating the response's JSON header from the operating procedure.
+ * Long markdown cannot survive JSON string escaping, so the two documents travel
+ * as plain text between markers and only the short header is JSON.
+ */
+export const PROCEDURE_MARKER = '<<<DSH:PROCEDURE>>>'
+
+/** The line separating the operating procedure from the evidence portrait. */
+export const EVIDENCE_MARKER = '<<<DSH:EVIDENCE>>>'
+
+/**
  * The distillation instructions. They state the two documents the answer must
- * carry, the evidence each may rest on, and the exact JSON the caller parses: the
- * operating procedure is the product, and the portrait is the evidence a reader
- * consults when they doubt a rule.
+ * carry, the evidence each may rest on, and the response format the caller
+ * parses: the operating procedure is the product, and the portrait is the
+ * evidence a reader consults when they doubt a rule.
  */
 export const DISTILL_SYSTEM_PROMPT = [
   'You turn one investor\'s published writing into a skill another trader can follow.',
@@ -117,18 +127,30 @@ export const DISTILL_SYSTEM_PROMPT = [
   'A stock name survives only when the name itself carries the rule.',
   'Keep the whole operating procedure within about 150 lines of markdown, and the checklist within ten items.',
 
-  'The second is `portrait`, the evidence portrait: who this investor is, the worldview behind the method,',
+  'The second is the evidence portrait: who this investor is, the worldview behind the method,',
   'the recurring arguments, and the verbatim quotes, dates, and cases that license the rules above.',
-  'It is the reference a reader consults when they doubt a rule, so it may be as long as the evidence requires.',
+  'It is the reference a reader consults when they doubt a rule.',
+  'Keep it within about 250 lines, citing the strongest evidence rather than every instance.',
 
   'Both documents are written in the language the investor writes in, headings included.',
-  'Answer with one JSON object and nothing else, using exactly these keys:',
-  '{"name": "<lower-case kebab-case skill name>", "description": "<one sentence, at most 500 characters, saying when a reader should load this skill>", "skill": "<operating procedure markdown>", "portrait": "<evidence portrait markdown>"}.',
+  'Answer in exactly three parts and nothing else.',
+  'First, one JSON object on its own line holding only "name" and "description":',
+  'name is a lower-case kebab-case skill name, and description is one sentence of at most 500 characters saying when a reader should load this skill.',
+  `Then, on its own line, ${PROCEDURE_MARKER}, followed by the operating procedure markdown.`,
+  `Then, on its own line, ${EVIDENCE_MARKER}, followed by the evidence portrait markdown.`,
+  'Write both documents as plain markdown: never wrap either in a code fence, never escape it as a JSON string,',
+  'and never repeat the JSON object after the markers.',
 ].join(' ')
 
 /** The response contract restated with the digest so the instruction survives truncation. */
-const OUTPUT_CONTRACT =
-  'Answer with one JSON object and nothing else: {"name": "<kebab-case>", "description": "<one sentence>", "skill": "<operating procedure markdown>", "portrait": "<evidence portrait markdown>"}'
+const OUTPUT_CONTRACT = [
+  'Answer in exactly three parts and nothing else.',
+  '{"name": "<kebab-case>", "description": "<one sentence>"}',
+  PROCEDURE_MARKER,
+  '<operating procedure markdown, no code fence>',
+  EVIDENCE_MARKER,
+  '<evidence portrait markdown, no code fence>',
+].join('\n')
 
 /** The portrait file written beside `SKILL.md`, holding the evidence behind the rules. */
 export const PORTRAIT_FILE = 'portrait.md'
@@ -222,43 +244,75 @@ export async function distillProfile(
 }
 
 /**
- * Parse the distillation answer into one profile.
+ * Parse the distillation answer into one profile: a short JSON header holding the
+ * name and description, then the operating procedure and the evidence portrait as
+ * plain markdown between {@link PROCEDURE_MARKER} and {@link EVIDENCE_MARKER}.
+ * Only the header is JSON, because the two documents are far too long to survive
+ * JSON string escaping.
  *
  * @param answer - the model's complete text answer.
  * @returns the validated profile.
  */
 export function parseProfile(answer: string): BloggerProfile {
+  const header = parseHeader(answer)
+  const procedureAt = answer.indexOf(PROCEDURE_MARKER, header.end)
+  if (procedureAt === -1) {
+    throw invalidProfile(`the answer carried no ${PROCEDURE_MARKER} line`, answer)
+  }
+  const evidenceAt = answer.indexOf(EVIDENCE_MARKER, procedureAt + PROCEDURE_MARKER.length)
+  if (evidenceAt === -1) {
+    throw invalidProfile(`the answer carried no ${EVIDENCE_MARKER} line`, answer)
+  }  const skill = unfence(answer.slice(procedureAt + PROCEDURE_MARKER.length, evidenceAt))
+  const portrait = unfence(answer.slice(evidenceAt + EVIDENCE_MARKER.length))
+  if (skill.length === 0) throw invalidProfile('the answer carried an empty operating procedure', answer)
+  if (portrait.length === 0) throw invalidProfile('the answer carried an empty evidence portrait', answer)
+  return { name: header.name, description: header.description, skill, portrait }
+}
+
+/**
+ * Parse the answer's leading JSON header.
+ *
+ * @param answer - the model's complete text answer.
+ * @returns the validated name and description, with the header's end offset.
+ */
+function parseHeader(answer: string): { name: string; description: string; end: number } {
+  // Tolerate a lead-in line ("Here it is:") before the header, but not a missing
+  // or unterminated one: the header is the answer's first object.
   const start = answer.indexOf('{')
-  const end = answer.lastIndexOf('}')
-  if (start === -1 || end <= start) {
-    throw invalidProfile('the answer carried no JSON object')
+  const end = start === -1 ? -1 : answer.indexOf('}', start)
+  if (end === -1) {
+    throw invalidProfile('the answer did not begin with the JSON header object', answer)
   }
   let value: unknown
   try {
     value = JSON.parse(answer.slice(start, end + 1))
   } catch (error: unknown) {
-    throw invalidProfile('the JSON object in the answer did not parse', error)
+    throw invalidProfile('the answer\'s JSON header did not parse', answer, error)
   }
-  // The slice is delimited by the answer's outermost braces, so a successful
-  // parse always yields an object; only its fields remain to check.
+  // The slice is delimited by the leading brace and the first closing brace, so a
+  // successful parse always yields an object; only its fields remain to check.
   const record = value as Record<string, unknown>
   const name = record['name']
   const description = record['description']
-  const skill = record['skill']
-  const portrait = record['portrait']
   if (typeof name !== 'string' || !isSkillName(name)) {
-    throw invalidProfile(`"${String(name)}" is not a lower-case kebab-case skill name`)
+    throw invalidProfile(`"${String(name)}" is not a lower-case kebab-case skill name`, answer)
   }
   if (typeof description !== 'string' || description.trim().length === 0) {
-    throw invalidProfile('the answer carried no "description" string')
+    throw invalidProfile('the header carried no "description" string', answer)
   }
-  if (typeof skill !== 'string' || skill.trim().length === 0) {
-    throw invalidProfile('the answer carried no "skill" string')
-  }
-  if (typeof portrait !== 'string' || portrait.trim().length === 0) {
-    throw invalidProfile('the answer carried no "portrait" string')
-  }
-  return { name, description: description.trim(), skill: skill.trim(), portrait: portrait.trim() }
+  return { name, description: description.trim(), end: end + 1 }
+}
+
+/**
+ * Strip one optional surrounding code fence from a document section.
+ *
+ * @param section - the raw section text.
+ * @returns the trimmed markdown, without a fence the model added anyway.
+ */
+function unfence(section: string): string {
+  const trimmed = section.trim()
+  const fenced = /^```[^\n]*\n([\s\S]*?)\n?```$/u.exec(trimmed)
+  return (fenced?.[1] ?? trimmed).trim()
 }
 
 /**
@@ -372,14 +426,17 @@ function assertFinished(finish: FinishReason): void {
 }
 
 /**
- * Build one profile-grammar failure.
+ * Build one profile-grammar failure. A parse failure carries an excerpt of the
+ * answer so the model can see what it actually wrote instead of guessing.
  *
  * @param detail - what the answer failed to satisfy.
+ * @param answer - the model's answer, when the failure was about its content.
  * @param cause - the parse failure, when one exists.
  * @returns the error to throw.
  */
-function invalidProfile(detail: string, cause?: unknown): BloggerSkillError {
-  const message = `the blogger distillation answer is not a usable profile: ${detail}`
+function invalidProfile(detail: string, answer?: string, cause?: unknown): BloggerSkillError {
+  const excerpt = answer === undefined ? '' : `; the answer began: "${answer.trim().replace(/\s+/gu, ' ').slice(0, 300)}"`
+  const message = `the blogger distillation answer is not a usable profile: ${detail}${excerpt}`
   return cause === undefined
     ? new BloggerSkillError(message, BLOGGER_PROFILE_INVALID)
     : new BloggerSkillError(message, BLOGGER_PROFILE_INVALID, { cause })

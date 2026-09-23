@@ -104,7 +104,7 @@ One JSON file per blogger, named `<source>-<userID>.json` under `corpusRoot`. Re
 
 ### Distillation flow
 
-`blogger_build_skill` renders a bounded digest of the corpus, appends the exact request to the session log, streams `ctx.llm`, checks the terminal finish reason, parses the JSON answer, and writes both files. The request is hand-built rather than loop-built, so it carries its own system prompt, is deep-frozen, and is never marked as a loop request. One call produces both documents because they must agree: the procedure states the rules, and the portrait holds the evidence for exactly those rules.
+`blogger_build_skill` renders a bounded digest of the corpus, appends the exact request to the session log, streams `ctx.llm`, checks the terminal finish reason, parses the answer, and writes both files. The request is hand-built rather than loop-built, so it carries its own system prompt, is deep-frozen, and is never marked as a loop request. One call produces both documents because they must agree: the procedure states the rules, and the portrait holds the evidence for exactly those rules. The answer carries a one-object JSON header holding the name and description, then the two documents as plain markdown between two marker lines — a document that long cannot survive JSON string escaping. A failed parse reports the first 300 characters the model actually wrote, so the next call can correct it.
 
 </details>
 
