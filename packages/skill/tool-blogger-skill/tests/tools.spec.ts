@@ -8,7 +8,7 @@
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
@@ -541,6 +541,9 @@ describe('formatIngest', () => {
     offlineReplies: 1,
   }
 
+  /** The line a platform blogger whose corpus holds no platform record gets. */
+  const NO_PLATFORM_HISTORY = 'No platform history is stored for handle yet. Run blogger_harvest for it to collect that history into this same corpus, then distil; documents alone are only the material the platform no longer carries.'
+
   it('renders the counts, the corpus path, and the next step', () => {
     expect(formatIngest(VALUE)).toBe([
       'Ingested 2 document(s) into local blogger handle: 1 post(s), 1 reply/replies.',
@@ -552,6 +555,34 @@ describe('formatIngest', () => {
 
   it('names the display name once the corpus learned one', () => {
     expect(formatIngest({ ...VALUE, userName: '炒股养家' })).toContain('into local blogger handle (炒股养家):')
+  })
+
+  it('omits the platform-history line for a local blogger whose corpus holds only documents', () => {
+    const local = formatIngest({ ...VALUE, posts: 1, replies: 0, offlinePosts: 1, offlineReplies: 0 })
+
+    expect(local).not.toContain('No platform history is stored')
+    expect(local).toContain('Corpus: /corpora/local-handle.json')
+  })
+
+  it('adds the platform-history line for a platform blogger whose corpus holds only documents', () => {
+    const platformOnly = formatIngest({
+      ...VALUE,
+      source: 'tgb',
+      posts: 1,
+      replies: 0,
+      offlinePosts: 1,
+      offlineReplies: 0,
+    })
+
+    expect(platformOnly).toContain(NO_PLATFORM_HISTORY)
+    expect(platformOnly.indexOf(NO_PLATFORM_HISTORY)).toBeLessThan(platformOnly.indexOf('Corpus: /corpora/local-handle.json'))
+  })
+
+  it('omits the platform-history line for a platform blogger whose corpus holds platform records too', () => {
+    const withPlatform = formatIngest({ ...VALUE, source: 'tgb' })
+
+    expect(withPlatform).not.toContain('No platform history is stored')
+    expect(withPlatform).toContain('of which 1 and 1 came from documents.')
   })
 })
 
@@ -595,8 +626,67 @@ describe('blogger_ingest_documents', () => {
     const stored = JSON.parse(readFileSync((out.value as { corpusPath: string }).corpusPath, 'utf8')) as {
       posts: { id: string; origin?: string; documentPath?: string; title?: string }[]
     }
-    expect(stored.posts.find(post => post.id === `offline:${document}`))
+    expect(stored.posts.find(post => post.id === `offline:${basename(document)}`))
       .toMatchObject({ origin: 'offline', documentPath: document, title: 'A deleted call' })
+    expect((out.content[0] as { text: string }).text).not.toContain('No platform history is stored')
+  })
+
+  it('collapses two documents that share a file name in different directories into one record', async () => {
+    const harness = await mount()
+    const directory = join(harness.root.path, 'archive')
+    mkdirSync(directory, { recursive: true })
+    const first = writeDocument(harness, 'same-name.md', '---\ntitle: First copy\n---\nfirst body')
+    const moved = join(directory, 'same-name.md')
+    writeFileSync(moved, '---\ntitle: Second copy\n---\nsecond body')
+
+    const firstOut = await harness.call('blogger_ingest_documents', { user: USER, documents: [first] })
+    const secondOut = await harness.call('blogger_ingest_documents', { user: USER, documents: [moved] })
+
+    expect(firstOut.isError).toBe(false)
+    expect(secondOut.isError).toBe(false)
+    if (firstOut.isError || secondOut.isError) return
+    expect(firstOut.value).toMatchObject({ posts: 1, offlinePosts: 1 })
+    expect(secondOut.value).toMatchObject({ posts: 1, offlinePosts: 1 })
+    const stored = JSON.parse(readFileSync((secondOut.value as { corpusPath: string }).corpusPath, 'utf8')) as {
+      posts: { id: string; documentPath?: string; title?: string }[]
+    }
+    expect(stored.posts).toEqual([
+      expect.objectContaining({ id: 'offline:same-name.md', documentPath: moved, title: 'Second copy' }),
+    ])
+  })
+
+  it('replaces a record re-ingested from an edited document under the same file name', async () => {
+    const harness = await mount()
+    const document = writeDocument(harness, 'edited.md', '---\ntitle: Before\npublishedAt: 2025-01-01\n---\nfirst body')
+    await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+    writeFileSync(document, '---\ntitle: After\npublishedAt: 2025-01-01\n---\nsecond body')
+
+    const out = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+
+    expect(out.isError).toBe(false)
+    if (out.isError) return
+    expect(out.value).toMatchObject({ posts: 1, offlinePosts: 1 })
+    const stored = JSON.parse(readFileSync((out.value as { corpusPath: string }).corpusPath, 'utf8')) as {
+      posts: { id: string; title?: string; bodyMarkdown?: string }[]
+    }
+    expect(stored.posts).toEqual([
+      expect.objectContaining({ id: 'offline:edited.md', title: 'After', bodyMarkdown: 'second body' }),
+    ])
+  })
+
+  it('tells the model a platform blogger holds no platform history yet', async () => {
+    const harness = await mount()
+    const document = writeDocument(harness, 'only-offline.md', 'body')
+
+    const out = await harness.call('blogger_ingest_documents', { user: USER, documents: [document] })
+
+    expect(out.isError).toBe(false)
+    if (out.isError) return
+    expect(out.value).toMatchObject({ source: 'stub', posts: 1, replies: 0, offlinePosts: 1, offlineReplies: 0 })
+    expect((out.content[0] as { text: string }).text).toContain(
+      `No platform history is stored for ${USER} yet. Run blogger_harvest for it to collect that history into this same corpus, `
+      + 'then distil; documents alone are only the material the platform no longer carries.',
+    )
   })
 
   it('ingests into a local blogger that has no platform history', async () => {
@@ -623,6 +713,7 @@ describe('blogger_ingest_documents', () => {
     expect(out.content[0]).toMatchObject({
       text: expect.stringContaining('Ingested 1 document(s) into local blogger 炒股养家 (炒股养家): 1 post(s), 0 reply/replies.') as string,
     })
+    expect((out.content[0] as { text: string }).text).not.toContain('No platform history is stored')
   })
 
   it('re-ingests an unchanged document without duplicating its record', async () => {

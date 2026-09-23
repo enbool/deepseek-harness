@@ -2743,7 +2743,7 @@ web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可�
 
 ### `blogger_ingest_documents`
 
-把本地 Markdown 文档并入某位博主的语料。用于平台已删除或从未收录的材料：传入与 blogger_harvest 相同的 user，即可把文档加入平台博主；传入以 local: 开头的引用，则用于没有任何平台历史的博主。每份文档都是 Markdown，可带 YAML frontmatter，用于命名 title、publishedAt、kind、platformId、topicTitle 和 topicUrl。重复摄取未改动的文档会替换其记录，而不是产生重复。
+把本地 Markdown 文档并入某位博主的语料。用于平台已删除或从未收录的材料：传入与 blogger_harvest 相同的 user，即可把文档加入平台博主；传入以 local: 开头的引用，则用于没有任何平台历史的博主。平台博主的历史仍来自 blogger_harvest，两个工具写入同一份语料，因此只要该博主有平台历史就要一并采集。每份文档都是 Markdown，可带 YAML frontmatter，用于命名 title、publishedAt、kind、platformId、topicTitle 和 topicUrl。重复摄取同一份文档会替换其记录，而不是产生重复。
 
 ```json
 {

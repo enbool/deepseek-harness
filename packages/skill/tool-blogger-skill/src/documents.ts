@@ -41,7 +41,9 @@ export interface IngestedDocument {
  * Read one markdown document: its optional frontmatter and its body. Recognized
  * fields are `title`, `publishedAt`, `kind`, `platformId`, `topicTitle`, and
  * `topicUrl`; every other field is ignored so a document may carry its own
- * bookkeeping.
+ * bookkeeping. The document's record id comes from its file name unless
+ * `platformId` names one, so a document that shares a file name with another
+ * replaces that one's record.
  *
  * @param path - the path the document was read from.
  * @param text - the document's UTF-8 content.
@@ -115,14 +117,16 @@ export function documentReply(document: IngestedDocument): CorpusReply {
 }
 
 /**
- * The corpus id one document owns. It derives from the path, so re-ingesting the
- * same document replaces its record instead of appending a second copy.
+ * The corpus id one document owns. It derives from the document's file name, so
+ * re-ingesting a document replaces its record even after its contents changed or
+ * it moved; the intake records the read path separately. Two documents that share
+ * a file name therefore share one record.
  *
  * @param document - the classified document.
  * @returns the record id.
  */
 function offlineId(document: IngestedDocument): string {
-  return `offline:${document.path}`
+  return `offline:${basename(document.path)}`
 }
 
 /**

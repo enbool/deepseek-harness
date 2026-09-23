@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/skill/tool-blogger-skill/README.md
-README.md: 13085128ac2e48a3e163152953fce5d9d0b30c85
-README.zh.md: c7481e9f1e1d70318e01a631e64b8a3675c2fec5
+README.md: 25dc3ab5737723bce238d109990d857f84975c01
+README.zh.md: 7c877b7073c68e5ad2fbe7bafc6482cd5e21698a

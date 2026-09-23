@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Offline documents as corpus records: the frontmatter grammar, the title and
  * kind fallbacks, and the post and reply records one document becomes.
  */
@@ -134,11 +134,11 @@ describe('documentPost', () => {
     })
   })
 
-  it('keys a document that names no platform id by its path', () => {
+  it('keys a document that names no platform id by its file name', () => {
     const document = parseDocument('/saved/a.md', 'body', 'post')
 
     expect(documentPost(document)).toEqual({
-      id: 'offline:/saved/a.md',
+      id: 'offline:a.md',
       url: '/saved/a.md',
       title: 'a',
       publishedAt: UNKNOWN_DATE,
@@ -146,6 +146,22 @@ describe('documentPost', () => {
       origin: 'offline',
       documentPath: '/saved/a.md',
     })
+  })
+
+  it('gives one file name in two directories the same record id', () => {
+    const saved = documentPost(parseDocument('/saved/a.md', 'first body', 'post'))
+    const moved = documentPost(parseDocument('/archive/a.md', 'second body', 'post'))
+
+    expect(moved.id).toBe(saved.id)
+    expect(moved.documentPath).toBe('/archive/a.md')
+  })
+
+  it('gives an edited document the record id its unchanged file name already owns', () => {
+    const before = documentPost(parseDocument('/saved/a.md', '---\ntitle: Before\n---\nfirst body', 'post'))
+    const after = documentPost(parseDocument('/saved/a.md', '---\ntitle: After\n---\nsecond body', 'post'))
+
+    expect(after.id).toBe(before.id)
+    expect(after.bodyMarkdown).toBe('second body')
   })
 })
 
@@ -178,7 +194,7 @@ describe('documentReply', () => {
     const document = parseDocument('/saved/reply.md', '# A reply heading\n\nbody', 'reply')
 
     expect(documentReply(document)).toEqual({
-      id: 'offline:/saved/reply.md',
+      id: 'offline:reply.md',
       url: '/saved/reply.md',
       topicTitle: 'A reply heading',
       topicUrl: '/saved/reply.md',
@@ -187,5 +203,13 @@ describe('documentReply', () => {
       origin: 'offline',
       documentPath: '/saved/reply.md',
     })
+  })
+
+  it('gives one reply file name in two directories the same record id', () => {
+    const saved = documentReply(parseDocument('/saved/reply.md', 'first body', 'reply'))
+    const moved = documentReply(parseDocument('/archive/reply.md', 'second body', 'reply'))
+
+    expect(moved.id).toBe(saved.id)
+    expect(moved.documentPath).toBe('/archive/reply.md')
   })
 })

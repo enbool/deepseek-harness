@@ -83,11 +83,14 @@ export type MergePosition = 'start' | 'end'
 
 /**
  * Fold one harvest's posts into the stored ones, keeping platform list order.
- * A harvested post that carries no body keeps the stored body.
+ * A harvested post that carries no body keeps the stored body. Document records
+ * stay out of the platform window merge and are placed back by their own dates,
+ * so harvesting before or after an intake leaves one chronology either way, and
+ * the retention bound never drops a document.
  *
  * @param existing - the stored posts, in platform list order.
  * @param harvested - this harvest's posts, in the same order.
- * @param maxPosts - the retained-post bound, applied to the newest end.
+ * @param maxPosts - the retained-post bound, applied to the newest platform end.
  * @param position - whether this window precedes or continues the stored list.
  * @returns the merged posts, in platform list order.
  */
@@ -97,8 +100,10 @@ export function mergePosts(
   maxPosts: number,
   position: MergePosition,
 ): CorpusPost[] {
-  const merged = position === 'start' ? mergePostsAtStart(existing, harvested) : mergePostsAtEnd(existing, harvested)
-  return capEntries(merged, maxPosts, post => post.origin)
+  const documents = existing.filter(post => post.origin === 'offline')
+  const platform = existing.filter(post => post.origin !== 'offline')
+  const merged = position === 'start' ? mergePostsAtStart(platform, harvested) : mergePostsAtEnd(platform, harvested)
+  return insertByDate(merged.slice(0, maxPosts), documents, post => post.publishedAt)
 }
 
 /**
@@ -143,10 +148,11 @@ function mergePostsAtEnd(existing: readonly CorpusPost[], harvested: readonly Co
 
 /**
  * Fold one harvest's replies into the stored ones, keeping platform list order.
+ * Document records are placed back by their own dates, as in {@link mergePosts}.
  *
  * @param existing - the stored replies, in platform list order.
  * @param harvested - this harvest's replies, in the same order.
- * @param maxReplies - the retained-reply bound, applied to the newest end.
+ * @param maxReplies - the retained-reply bound, applied to the newest platform end.
  * @param position - whether this window precedes or continues the stored list.
  * @returns the merged replies, in platform list order.
  */
@@ -156,10 +162,12 @@ export function mergeReplies(
   maxReplies: number,
   position: MergePosition,
 ): CorpusReply[] {
+  const documents = existing.filter(reply => reply.origin === 'offline')
+  const platform = existing.filter(reply => reply.origin !== 'offline')
   const merged = position === 'start'
-    ? [...harvested, ...existing.filter(reply => !harvested.some(next => next.id === reply.id))]
-    : mergeRepliesAtEnd(existing, harvested)
-  return capEntries(merged, maxReplies, reply => reply.origin)
+    ? [...harvested, ...platform.filter(reply => !harvested.some(next => next.id === reply.id))]
+    : mergeRepliesAtEnd(platform, harvested)
+  return insertByDate(merged.slice(0, maxReplies), documents, reply => reply.repliedAt)
 }
 
 /**
@@ -176,25 +184,6 @@ function mergeRepliesAtEnd(existing: readonly CorpusReply[], harvested: readonly
   const merged = existing.map(reply => incoming.get(reply.id) ?? reply)
   for (const reply of harvested) if (!known.has(reply.id)) merged.push(reply)
   return merged
-}
-
-/**
- * Apply the retention bound to the platform entries only. Offline entries are an
- * explicit intake of documents the user chose, not automatic growth, so dropping
- * them silently would lose the material the user came for.
- *
- * @param entries - the merged entries, newest first.
- * @param max - the bound on platform entries.
- * @param originOf - reads one entry's origin.
- * @returns every offline entry, plus the newest `max` platform entries.
- */
-function capEntries<T extends { readonly id: string }>(
-  entries: readonly T[],
-  max: number,
-  originOf: (entry: T) => CorpusOrigin | undefined,
-): T[] {
-  const kept = new Set(entries.filter(entry => originOf(entry) !== 'offline').slice(0, max).map(entry => entry.id))
-  return entries.filter(entry => originOf(entry) === 'offline' || kept.has(entry.id))
 }
 
 /**

@@ -85,9 +85,13 @@ export interface IngestValue {
  */
 export function formatIngest(value: IngestValue): string {
   const who = `${value.source} blogger ${value.userID}${value.userName === undefined ? '' : ` (${value.userName})`}`
+  const platform = (value.posts - value.offlinePosts) + (value.replies - value.offlineReplies)
   return [
     `Ingested ${value.documentsRead} document(s) into ${who}: ${value.postsIngested} post(s), ${value.repliesIngested} reply/replies.`,
     `Corpus now holds ${value.posts} post(s) and ${value.replies} reply/replies, of which ${value.offlinePosts} and ${value.offlineReplies} came from documents.`,
+    ...platform === 0 && value.source !== 'local'
+      ? [`No platform history is stored for ${value.userID} yet. Run blogger_harvest for it to collect that history into this same corpus, then distil; documents alone are only the material the platform no longer carries.`]
+      : [],
     `Corpus: ${value.corpusPath}`,
     'Run blogger_build_skill to distil it.',
   ].join('\n')
@@ -294,7 +298,7 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
   ctx.bloggers.register(LOCAL_SOURCE)
   ctx.tools.register(defineTool({
     name: 'blogger_ingest_documents',
-    description: 'Fold local markdown documents into a blogger\'s corpus. Use it for material the platform deleted or never carried: pass the same user as blogger_harvest to add documents to a platform blogger, or a reference beginning with local: for a blogger with no platform history. Each document is markdown with optional YAML frontmatter naming title, publishedAt, kind, platformId, topicTitle, and topicUrl. Re-ingesting an unchanged document replaces its record instead of duplicating it.',
+    description: 'Fold local markdown documents into a blogger\'s corpus. Use it for material the platform deleted or never carried: pass the same user as blogger_harvest to add documents to a platform blogger, or a reference beginning with local: for a blogger with no platform history. A platform blogger\'s history still comes from blogger_harvest, and both tools write the same corpus, so collect the platform history as well whenever the blogger has one. Each document is markdown with optional YAML frontmatter naming title, publishedAt, kind, platformId, topicTitle, and topicUrl. Re-ingesting a document replaces its record instead of duplicating it.',
     parameters: {
       user: {
         type: 'string',

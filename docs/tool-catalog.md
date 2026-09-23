@@ -2735,7 +2735,7 @@ Source: [`packages/skill/tool-blogger-skill/src/index.ts`](../packages/skill/too
 
 ### `blogger_ingest_documents`
 
-Fold local markdown documents into a blogger's corpus. Use it for material the platform deleted or never carried: pass the same user as blogger_harvest to add documents to a platform blogger, or a reference beginning with local: for a blogger with no platform history. Each document is markdown with optional YAML frontmatter naming title, publishedAt, kind, platformId, topicTitle, and topicUrl. Re-ingesting an unchanged document replaces its record instead of duplicating it.
+Fold local markdown documents into a blogger's corpus. Use it for material the platform deleted or never carried: pass the same user as blogger_harvest to add documents to a platform blogger, or a reference beginning with local: for a blogger with no platform history. A platform blogger's history still comes from blogger_harvest, and both tools write the same corpus, so collect the platform history as well whenever the blogger has one. Each document is markdown with optional YAML frontmatter naming title, publishedAt, kind, platformId, topicTitle, and topicUrl. Re-ingesting a document replaces its record instead of duplicating it.
 
 ```json
 {
