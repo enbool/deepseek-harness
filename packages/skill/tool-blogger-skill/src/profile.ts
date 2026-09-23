@@ -124,7 +124,7 @@ export const DISTILL_SYSTEM_PROMPT = [
   'and never invent a rule, a threshold, a number, or a checklist item the evidence does not support.',
   'Leave out biography, praise, narrative, dates, decorative stock names, and quotes kept only because they sound good.',
   'A stock name survives only when the name itself carries the rule.',
-  'Keep the whole procedure within about 150 lines of markdown, and the checklist within ten items.',
+  'Keep the whole procedure within about 80 lines of markdown, and the checklist within ten items.',
   'Write it in the language the investor writes in, headings included.',
   'Answer in exactly two parts and nothing else.',
   'First, one JSON object on its own line holding only "name" and "description":',
@@ -155,7 +155,7 @@ export const PORTRAIT_SYSTEM_PROMPT = [
   'The portrait is what a reader consults when they doubt a rule, so cite the strongest evidence',
   'rather than every instance, and keep the quotes verbatim rather than paraphrasing them.',
   'Leave out praise and narrative, and never invent a quote, a date, or a case.',
-  'Write it in the language the investor writes in, headings included, within about 250 lines.',
+  'Write it in the language the investor writes in, headings included, within about 120 lines.',
   'Answer with the portrait markdown and nothing else: no preamble and no code fence.',
 ].join(' ')
 
@@ -178,7 +178,7 @@ export const EVIDENCE_SYSTEM_PROMPT = [
   'the date, and the case that carries it. State a rule once, then list the passages supporting it.',
   'Record nothing else: no summary of the writer, no praise, no restating of the corpus,',
   'no speculation beyond the window, and nothing the window does not say.',
-  'Keep the note within about 120 lines.',
+  'Keep the note within about 80 lines.',
   'Answer with the note markdown and nothing else: no preamble and no code fence.',
 ].join(' ')
 
@@ -240,7 +240,11 @@ export async function distillProfile(
         notesReused += 1
         continue
       }
-      const note = await callModel(ctx, limits, request, EVIDENCE_SYSTEM_PROMPT, evidenceUserMessage(chunk, chunks.length))
+      const note = await callModel(
+        ctx, limits, request, EVIDENCE_SYSTEM_PROMPT,
+        evidenceUserMessage(chunk, chunks.length),
+        `evidence pass for window ${chunk.index} of ${chunks.length}`,
+      )
       passes += 1
       await writeNote(ctx, request, chunk, note)
       notes.push(note)
@@ -253,7 +257,7 @@ export async function distillProfile(
       BLOGGER_EVIDENCE_TOO_LARGE,
     )
   }
-  const procedure = parseProcedure(await callModel(ctx, limits, request, DISTILL_SYSTEM_PROMPT, merge))
+  const procedure = parseProcedure(await callModel(ctx, limits, request, DISTILL_SYSTEM_PROMPT, merge, 'procedure pass'))
   const portraitPrompt = `${merge}\n\n--- operating procedure ---\n\n${procedure.skill}\n\n${PORTRAIT_CONTRACT}`
   if (estimateTokens(portraitPrompt) > limits.maxPromptTokens) {
     throw new BloggerSkillError(
@@ -261,7 +265,7 @@ export async function distillProfile(
       BLOGGER_EVIDENCE_TOO_LARGE,
     )
   }
-  const portrait = parsePortrait(await callModel(ctx, limits, request, PORTRAIT_SYSTEM_PROMPT, portraitPrompt))
+  const portrait = parsePortrait(await callModel(ctx, limits, request, PORTRAIT_SYSTEM_PROMPT, portraitPrompt, 'portrait pass'))
   return { profile: { ...procedure, portrait }, evidenceChars, passes: passes + 2, notesReused }
 }
 
@@ -275,6 +279,7 @@ export async function distillProfile(
  * @param request - the route, session, and cancellation.
  * @param system - the exact system prompt.
  * @param userText - the exact user message.
+ * @param pass - which pass this request is, named in any failure it reports.
  * @returns the answer's visible text.
  */
 async function callModel(
@@ -283,6 +288,7 @@ async function callModel(
   request: DistillRequest,
   system: string,
   userText: string,
+  pass: string,
 ): Promise<string> {
   const messages: RequestMessage[] = [{ role: 'user', content: [{ type: 'text', text: userText }] }]
   const options: GenerateOptions = deepFreeze({
@@ -304,7 +310,7 @@ async function callModel(
   })
   const assembler = new BlockAssembler()
   for await (const chunk of ctx.llm.stream(options)) assembler.push(chunk)
-  assertFinished(assembler.finish)
+  assertFinished(assembler.finish, pass)
   return assembler.blocks().map(block => block.type === 'text' ? block.text : '').join('')
 }
 
@@ -515,20 +521,24 @@ export async function writeSkillFile(
  * Translate a terminal finish reason into a distillation failure.
  *
  * @param finish - the assembler's terminal finish reason.
+ * @param pass - which pass the request was, named in the failure.
  */
-function assertFinished(finish: FinishReason): void {
+function assertFinished(finish: FinishReason, pass: string): void {
   switch (finish.kind) {
     case 'stop':
       return
     case 'error':
     case 'aborted':
-      throw new BloggerSkillError(`the blogger distillation model failed: ${finish.failure.message}`, finish.failure.code)
+      throw new BloggerSkillError(
+        `the ${pass} failed: ${finish.failure.message}`,
+        finish.failure.code,
+      )
     case 'max-tokens':
-      throw invalidProfile('the answer reached maxOutputTokens before finishing')
+      throw invalidProfile(`the ${pass} reached maxOutputTokens before finishing`)
     case 'tool-calls':
-      throw invalidProfile('the model requested a tool, but the distillation request offers none')
+      throw invalidProfile(`the ${pass} requested a tool, but the distillation request offers none`)
     default:
-      throw invalidProfile(`unsupported finish reason "${String((finish as { kind?: unknown }).kind)}"`)
+      throw invalidProfile(`the ${pass} ended with unsupported finish reason "${String((finish as { kind?: unknown }).kind)}"`)
   }
 }
 
