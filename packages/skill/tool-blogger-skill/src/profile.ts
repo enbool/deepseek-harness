@@ -94,24 +94,44 @@ declare module '@deepseek-ai/dsh-session/types' {
 }
 
 /**
- * The distillation instructions. They state the task, the evidence the answer
- * must rest on, and the exact JSON answer the caller parses.
+ * The distillation instructions. They state the two documents the answer must
+ * carry, the evidence each may rest on, and the exact JSON the caller parses: the
+ * operating procedure is the product, and the portrait is the evidence a reader
+ * consults when they doubt a rule.
  */
 export const DISTILL_SYSTEM_PROMPT = [
-  'You distill one stock-forum blogger\'s published writing into a reusable reasoning profile.',
-  'Work only from the supplied corpus: posts and replies that blogger wrote.',
-  'Infer the blogger\'s decision rules, the evidence they weigh, the market conditions they trade,',
-  'the positions they take, and the recurring mistakes they warn about.',
-  'Ground every rule in repeated behaviour across the corpus, not in one post; when the corpus is too',
-  'thin to support a rule, omit it rather than inventing one.',
-  'Write the profile in the same language the blogger writes in.',
+  'You turn one investor\'s published writing into a skill another trader can follow.',
+  'Work only from the supplied corpus: posts and replies that this investor wrote.',
+  'Answer with two documents.',
+
+  'The first is `skill`, the operating procedure, and it is the product.',
+  'Write it in the imperative: every line tells the reader what to do, check, or refuse.',
+  'State each rule as a condition and its action together, so a reader can act without interpreting prose.',
+  'Cover, in this order, and omit a section only when the corpus is genuinely silent on it:',
+  'when this method applies and when it does not; the decision spine as one short chain;',
+  'the judgement rules; execution, meaning entries, additions, reductions, and exits, each with its trigger;',
+  'position sizing; refusals and failure modes; and a short pre-trade checklist of answerable questions.',
+  'Ground every rule in behaviour repeated across the corpus; drop anything one passage alone supports,',
+  'and never invent a rule, a threshold, a number, or a checklist item the corpus does not support.',
+  'Leave out biography, praise, narrative, dates, decorative stock names, and quotes kept only because they sound good.',
+  'A stock name survives only when the name itself carries the rule.',
+  'Keep the whole operating procedure within about 150 lines of markdown, and the checklist within ten items.',
+
+  'The second is `portrait`, the evidence portrait: who this investor is, the worldview behind the method,',
+  'the recurring arguments, and the verbatim quotes, dates, and cases that license the rules above.',
+  'It is the reference a reader consults when they doubt a rule, so it may be as long as the evidence requires.',
+
+  'Both documents are written in the language the investor writes in, headings included.',
   'Answer with one JSON object and nothing else, using exactly these keys:',
-  '{"name": "<lower-case kebab-case skill name>", "description": "<one sentence, at most 500 characters, saying when a reader should consult this profile>", "content": "<the profile as markdown>"}.',
+  '{"name": "<lower-case kebab-case skill name>", "description": "<one sentence, at most 500 characters, saying when a reader should load this skill>", "skill": "<operating procedure markdown>", "portrait": "<evidence portrait markdown>"}.',
 ].join(' ')
 
 /** The response contract restated with the digest so the instruction survives truncation. */
 const OUTPUT_CONTRACT =
-  'Answer with one JSON object and nothing else: {"name": "<kebab-case>", "description": "<one sentence>", "content": "<markdown profile>"}'
+  'Answer with one JSON object and nothing else: {"name": "<kebab-case>", "description": "<one sentence>", "skill": "<operating procedure markdown>", "portrait": "<evidence portrait markdown>"}'
+
+/** The portrait file written beside `SKILL.md`, holding the evidence behind the rules. */
+export const PORTRAIT_FILE = 'portrait.md'
 
 /**
  * Resolve the model route for one distillation: the configured pair when both
@@ -224,49 +244,71 @@ export function parseProfile(answer: string): BloggerProfile {
   const record = value as Record<string, unknown>
   const name = record['name']
   const description = record['description']
-  const content = record['content']
+  const skill = record['skill']
+  const portrait = record['portrait']
   if (typeof name !== 'string' || !isSkillName(name)) {
     throw invalidProfile(`"${String(name)}" is not a lower-case kebab-case skill name`)
   }
   if (typeof description !== 'string' || description.trim().length === 0) {
     throw invalidProfile('the answer carried no "description" string')
   }
-  if (typeof content !== 'string' || content.trim().length === 0) {
-    throw invalidProfile('the answer carried no "content" string')
+  if (typeof skill !== 'string' || skill.trim().length === 0) {
+    throw invalidProfile('the answer carried no "skill" string')
   }
-  return { name, description: description.trim(), content: content.trim() }
+  if (typeof portrait !== 'string' || portrait.trim().length === 0) {
+    throw invalidProfile('the answer carried no "portrait" string')
+  }
+  return { name, description: description.trim(), skill: skill.trim(), portrait: portrait.trim() }
 }
 
 /**
- * Render one profile as a `SKILL.md` document. The description is JSON-quoted so
- * a colon or quote inside it stays a valid YAML frontmatter scalar.
+ * Render the operating procedure as a `SKILL.md` document. The description is
+ * JSON-quoted so a colon or quote inside it stays a valid YAML frontmatter
+ * scalar, and the pointer to the portrait is package-owned text so the evidence
+ * stays reachable however the model wrote the procedure.
  *
  * @param profile - the profile to render.
  * @returns the complete file content.
  */
 export function renderSkillFile(profile: BloggerProfile): string {
-  return `---\nname: ${profile.name}\ndescription: ${JSON.stringify(profile.description)}\n---\n\n${profile.content}\n`
+  return [
+    '---',
+    `name: ${profile.name}`,
+    `description: ${JSON.stringify(profile.description)}`,
+    '---',
+    '',
+    profile.skill,
+    '',
+    '---',
+    '',
+    `Evidence, quotes, and cases behind these rules: [\`${PORTRAIT_FILE}\`](${PORTRAIT_FILE}).`,
+    '',
+  ].join('\n')
 }
 
 /**
- * Write one profile as `<skillsRoot>/<name>/SKILL.md`.
+ * Write one profile as `<skillsRoot>/<name>/SKILL.md` plus its evidence portrait.
  *
  * @param ctx - context exposing the filesystem service.
  * @param skillsRoot - the configured skill root directory.
  * @param profile - the profile to write.
  * @param signal - cancellation signal.
- * @returns the absolute path written.
+ * @returns the absolute paths written.
  */
 export async function writeSkillFile(
   ctx: Context,
   skillsRoot: string,
   profile: BloggerProfile,
   signal: AbortSignal,
-): Promise<string> {
-  const path = join(skillsRoot, profile.name, 'SKILL.md')
-  const target = await ctx.fs.resolve(path, { signal })
-  await ctx.fs.writeText(target, renderSkillFile(profile), undefined, signal)
-  return path
+): Promise<{ skillPath: string; portraitPath: string }> {
+  const directory = join(skillsRoot, profile.name)
+  const skillPath = join(directory, 'SKILL.md')
+  const portraitPath = join(directory, PORTRAIT_FILE)
+  const skillTarget = await ctx.fs.resolve(skillPath, { signal })
+  await ctx.fs.writeText(skillTarget, renderSkillFile(profile), undefined, signal)
+  const portraitTarget = await ctx.fs.resolve(portraitPath, { signal })
+  await ctx.fs.writeText(portraitTarget, `${profile.portrait}\n`, undefined, signal)
+  return { skillPath, portraitPath }
 }
 
 /**

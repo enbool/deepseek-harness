@@ -135,7 +135,8 @@ export function profileAnswer(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     name: 'stub-blogger-buy-the-dip',
     description: 'Consult when judging a stub blogger\'s dip-buying rules.',
-    content: '## Rules\n\n- Wait for volume before buying.',
+    skill: '## When this applies\n\n- In a falling market with volume.\n\n## Rules\n\n- Wait for volume before buying.',
+    portrait: '## Worldview\n\n- The blogger buys dips on volume.',
     ...overrides,
   })
 }

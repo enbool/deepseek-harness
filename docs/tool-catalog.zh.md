@@ -2669,7 +2669,7 @@ web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可�
 
 ### `blogger_build_skill`
 
-将已采集的博主语料蒸馏为可加载的 skill：读取语料，推断博主的推理与判断规则，并写出 SKILL.md。请先运行 blogger_harvest。
+将已采集的博主语料转成可加载的 skill：读取语料，写出这位交易者可以照做的操作规程 SKILL.md，并在其旁写出支撑这些规则的人物画像。请先运行 blogger_harvest。
 
 ```json
 {

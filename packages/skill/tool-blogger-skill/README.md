@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-tool-blogger-skill` turns one forum blogger into a reusable skill. `blogger_harvest` takes a blogger's id or profile-page URL, resolves it against `ctx.bloggers`, collects that blogger's posts, post bodies, and replies, and merges them into a durable per-blogger corpus. `blogger_build_skill` reads that corpus, asks a model to infer the blogger's decision rules and judgement, and writes the answer as a `SKILL.md` under the configured skill root, where a skill provider discovers it. Both tools are read-only over the platform; only the corpus and skill files are written locally.
+`dsh-tool-blogger-skill` turns one forum blogger into a reusable skill. `blogger_harvest` takes a blogger's id or profile-page URL, resolves it against `ctx.bloggers`, collects that blogger's posts, post bodies, and replies, and merges them into a durable per-blogger corpus. `blogger_build_skill` reads that corpus and writes two files under the configured skill root: `SKILL.md`, an operating procedure written in the imperative so another trader can act on it, and `portrait.md`, the evidence portrait with the quotes, dates, and cases behind its rules. Both tools are read-only over the platform; only the corpus and skill files are written locally.
 
 ## Table of Contents
 
@@ -60,7 +60,7 @@ Choose this package when a user names a 大V blogger and wants that blogger's re
 ### The two tools
 
 - `blogger_harvest` — resolve `user` (or `user` plus an explicit `source`) and collect one page window. `postStartPage` and `replyStartPage` choose where each list begins, so a second call reaches pages the first could not. It merges into the stored corpus, keeps a body an earlier harvest already fetched, and returns the corpus totals, the per-call additions, and the pagination facts including the page to pass next.
-- `blogger_build_skill` — read that corpus and distill it. `skillName` overrides the model's proposed name; the file lands at `<skillsRoot>/<skillName>/SKILL.md`.
+- `blogger_build_skill` — read that corpus and distill it into two files. `SKILL.md` is the product: an imperative operating procedure covering when the method applies, the decision spine, the judgement rules, execution, position sizing, refusals, and a pre-trade checklist. `portrait.md` beside it carries the quotes, dates, and cases that license those rules, and `SKILL.md` links to it. `skillName` overrides the model's proposed name; the files land under `<skillsRoot>/<skillName>/`.
 
 ### The corpus
 
@@ -104,7 +104,7 @@ One JSON file per blogger, named `<source>-<userID>.json` under `corpusRoot`. Re
 
 ### Distillation flow
 
-`blogger_build_skill` renders a bounded digest of the corpus, appends the exact request to the session log, streams `ctx.llm`, checks the terminal finish reason, parses the JSON answer, and writes the file. The request is hand-built rather than loop-built, so it carries its own system prompt, is deep-frozen, and is never marked as a loop request.
+`blogger_build_skill` renders a bounded digest of the corpus, appends the exact request to the session log, streams `ctx.llm`, checks the terminal finish reason, parses the JSON answer, and writes both files. The request is hand-built rather than loop-built, so it carries its own system prompt, is deep-frozen, and is never marked as a loop request. One call produces both documents because they must agree: the procedure states the rules, and the portrait holds the evidence for exactly those rules.
 
 </details>
 
@@ -140,7 +140,7 @@ Prefix-stable while the tools are registered. Plugin lifecycle changes may inval
 
 #### What the model sees
 
-`blogger_harvest` renders a summary line naming the source, user id, display name, post and body counts, and reply count, then a line reporting what this call added and which page window it read, then — while either list still has more — the exact `postStartPage` or `replyStartPage` to pass next, then the corpus path. `blogger_build_skill` renders the skill name, the counts it distilled, the written path, the description, and the digest size. A cut output ends with `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)`; failures become `Error: <message>`.
+`blogger_harvest` renders a summary line naming the source, user id, display name, post and body counts, and reply count, then a line reporting what this call added and which page window it read, then — while either list still has more — the exact `postStartPage` or `replyStartPage` to pass next, then the corpus path. `blogger_build_skill` renders the skill name, the counts it distilled, the procedure path, the portrait path, the description, and the digest size. A cut output ends with `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)`; failures become `Error: <message>`.
 
 #### Token effect
 
@@ -157,7 +157,8 @@ Append-only; newly visible content follows the reusable request prefix and does 
 These limits are current package constraints.
 
 - **The model reads counts, not content** — the tool results carry no harvested text, so the model cannot judge the corpus itself; it can only decide whether to harvest more or to distill. A user who wants to read the writing uses the source's own tools.
-- **Regeneration overwrites** — `blogger_build_skill` writes `<skillsRoot>/<name>/SKILL.md` unconditionally, so regenerating under an existing name replaces that file with no merge and no confirmation.
+- **Regeneration overwrites** — `blogger_build_skill` writes `<skillsRoot>/<name>/SKILL.md` and its `portrait.md` unconditionally, so regenerating under an existing name replaces both files with no merge and no confirmation.
+- **The procedure is only as good as the corpus** — a blogger with a handful of posts yields rules the model cannot ground in repeated behaviour, and the package cannot tell a thin corpus from a rich one. The procedure's own "when this applies" section is the model's honest statement of that; the session log records the digest size.
 - **The digest is a straight truncation** — `maxPromptChars` cuts the corpus at a block boundary, so a very large corpus loses its oldest posts and replies from the prompt without the model being told which ones went missing beyond the `digestTruncated` flag.
 - **Distillation is single-attempt** — the request is a hand-built `ctx.llm.stream` call, which never retries; a provider failure surfaces to the model, which must call the tool again.
 

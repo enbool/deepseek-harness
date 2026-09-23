@@ -31,12 +31,14 @@ export interface BloggerCorpus {
   readonly replies: BloggerReply[]
 }
 
-/** The distilled profile a model returns before it becomes one skill file. */
+/** The distilled skill a model returns: the operating procedure plus its evidence. */
 export interface BloggerProfile {
   /** Kebab-case skill name; the skill file's directory name. */
   readonly name: string
   /** One-line skill description, used for discovery. */
   readonly description: string
-  /** The skill body: the blogger's reasoning and judgement rules as markdown. */
-  readonly content: string
+  /** The operating procedure: the blogger's rules as imperative, actionable markdown. */
+  readonly skill: string
+  /** The evidence portrait: worldview, recurring arguments, quotes, dates, and cases. */
+  readonly portrait: string
 }

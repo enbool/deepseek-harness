@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-tool-blogger-skill` 把一位论坛博主变成可复用的技能。`blogger_harvest` 接收博主 ID 或主页 URL，在 `ctx.bloggers` 上解析出对应源，采集该博主的主贴、正文与跟帖，并合并进一份持久的按博主划分的语料。`blogger_build_skill` 读取该语料，请模型推断博主的决策规则与判断，并把答案写成配置的技能根目录下的 `SKILL.md`，供技能提供者发现。两个工具对平台都是只读的；本地只写入语料与技能文件。
+`dsh-tool-blogger-skill` 把一位论坛博主变成可复用的技能。`blogger_harvest` 接收博主 ID 或主页 URL，在 `ctx.bloggers` 上解析出对应源，采集该博主的主贴、正文与跟帖，并合并进一份持久的按博主划分的语料。`blogger_build_skill` 读取该语料，在配置的技能根目录下写入两个文件：`SKILL.md`，一份用祈使句写成、可供另一位交易者直接照做的操作规程；以及它旁边的 `portrait.md`，即支撑这些规则的人物画像，含原文引用、日期与案例。两个工具对平台都是只读的；本地只写入语料与技能文件。
 
 ## 目录
 
@@ -60,7 +60,7 @@ kind: "package-reference"
 ### 两个工具
 
 - `blogger_harvest` —— 解析 `user`（或 `user` 加显式 `source`）并采集一段页窗口。`postStartPage` 与 `replyStartPage` 决定两侧列表各自的起点，因此第二次调用能取到第一次取不到的页。它把结果合并进已存语料，保留更早一次采集已抓到的正文，并返回语料总量、本次新增量与分页事实，其中包含下次该传的页码。
-- `blogger_build_skill` —— 读取该语料并蒸馏。`skillName` 可覆盖模型提议的名称；文件写入 `<skillsRoot>/<skillName>/SKILL.md`。
+- `blogger_build_skill` —— 读取该语料并蒸馏为两个文件。`SKILL.md` 是产物本身：一份祈使句写成的操作规程，覆盖适用范围、决策主干、判断规则、执行、仓位、禁止事项与操作前自检。其旁的 `portrait.md` 承载为这些规则提供依据的原文引用、日期与案例，`SKILL.md` 会链接到它。`skillName` 可覆盖模型提议的名称；文件写入 `<skillsRoot>/<skillName>/` 下。
 
 ### 语料
 
@@ -104,7 +104,7 @@ kind: "package-reference"
 
 ### 蒸馏流程
 
-`blogger_build_skill` 渲染有界的语料摘要、把确切请求追加到会话日志、流式调用 `ctx.llm`、检查终态结束原因、解析 JSON 答案并写入文件。该请求是手工构建而非由循环构建，因此自带系统提示词、被深度冻结，且从不被标记为循环请求。
+`blogger_build_skill` 渲染有界的语料摘要、把确切请求追加到会话日志、流式调用 `ctx.llm`、检查终态结束原因、解析 JSON 答案并写入两个文件。该请求是手工构建而非由循环构建，因此自带系统提示词、被深度冻结，且从不被标记为循环请求。一次调用同时产出两份文档，是因为它们必须彼此一致：规程陈述规则，画像则持有恰好支撑这些规则的依据。
 
 </details>
 
@@ -140,7 +140,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-`blogger_harvest` 先渲染一行摘要，给出源、用户 ID、显示名、主贴与正文数、跟帖数；再渲染一行说明本次新增了多少、读取了哪一段页窗口；随后在任一侧仍有更多时，给出下次该传的确切 `postStartPage` 或 `replyStartPage`；最后给出语料路径。`blogger_build_skill` 渲染技能名、参与蒸馏的条数、写入路径、描述与摘要大小。被截断的输出以 `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)` 结尾；失败呈现为 `Error: <message>`。
+`blogger_harvest` 先渲染一行摘要，给出源、用户 ID、显示名、主贴与正文数、跟帖数；再渲染一行说明本次新增了多少、读取了哪一段页窗口；随后在任一侧仍有更多时，给出下次该传的确切 `postStartPage` 或 `replyStartPage`；最后给出语料路径。`blogger_build_skill` 渲染技能名、参与蒸馏的条数、规程路径、画像路径、描述与摘要大小。被截断的输出以 `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)` 结尾；失败呈现为 `Error: <message>`。
 
 #### Token 影响
 
@@ -157,7 +157,8 @@ kind: "package-reference"
 以下限制是本包当前的约束。
 
 - **模型只看到计数，看不到内容** —— 工具结果不携带采集到的文本，因此模型无法评判语料本身，只能决定是否继续采集或开始蒸馏。想阅读原文的用户请使用源自身的工具。
-- **重新生成会覆盖** —— `blogger_build_skill` 无条件写入 `<skillsRoot>/<name>/SKILL.md`，因此用已有名称重新生成会直接替换该文件，既不合并也不确认。
+- **重新生成会覆盖** —— `blogger_build_skill` 无条件写入 `<skillsRoot>/<name>/SKILL.md` 及其 `portrait.md`，因此用已有名称重新生成会直接替换这两个文件，既不合并也不确认。
+- **规程的质量取决于语料** —— 只有寥寥数篇主贴的博主，模型无法把规则建立在反复出现的行为之上，而本包也无法区分语料厚薄。规程自身的「适用范围」一节就是模型对此的诚实交代；会话日志记录了摘要字符数。
 - **摘要是直接截断** —— `maxPromptChars` 在块边界截断语料，因此超大语料会从提示词中丢失最旧的主贴与跟帖，而模型除 `digestTruncated` 标志外无从得知丢了哪些。
 - **蒸馏只尝试一次** —— 该请求是手工构建的 `ctx.llm.stream` 调用，从不重试；提供者失败会呈现给模型，由模型再次调用工具。
 

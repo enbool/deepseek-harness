@@ -2661,7 +2661,7 @@ Source: [`packages/web/tool-tgb/src/index.ts`](../packages/web/tool-tgb/src/inde
 
 ### `blogger_build_skill`
 
-Distill a harvested blogger corpus into a loadable skill: reads the corpus, infers the blogger's reasoning and judgement rules, and writes a SKILL.md. Run blogger_harvest first.
+Turn a harvested blogger corpus into a loadable skill: reads the corpus, writes an operating procedure this trader can follow as SKILL.md, and writes the evidence portrait behind its rules beside it. Run blogger_harvest first.
 
 ```json
 {

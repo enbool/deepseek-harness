@@ -95,8 +95,10 @@ export interface BuildSkillValue {
   readonly userName?: string
   /** The written skill's kebab-case name. */
   readonly skillName: string
-  /** Absolute path of the written `SKILL.md`. */
+  /** Absolute path of the written `SKILL.md` holding the operating procedure. */
   readonly skillPath: string
+  /** Absolute path of the written evidence portrait beside it. */
+  readonly portraitPath: string
   /** The written description, as it appears in the skill's frontmatter. */
   readonly description: string
   /** Posts the corpus held. */
@@ -313,7 +315,7 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
 
   ctx.tools.register(defineTool({
     name: 'blogger_build_skill',
-    description: 'Distill a harvested blogger corpus into a loadable skill: reads the corpus, infers the blogger\'s reasoning and judgement rules, and writes a SKILL.md. Run blogger_harvest first.',
+    description: 'Turn a harvested blogger corpus into a loadable skill: reads the corpus, writes an operating procedure this trader can follow as SKILL.md, and writes the evidence portrait behind its rules beside it. Run blogger_harvest first.',
     parameters: {
       user: {
         type: 'string',
@@ -339,6 +341,7 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
           userName: { type: 'string' },
           skillName: { type: 'string', required: true },
           skillPath: { type: 'string', required: true },
+          portraitPath: { type: 'string', required: true },
           description: { type: 'string', required: true },
           posts: { type: 'integer', required: true },
           postsWithBody: { type: 'integer', required: true },
@@ -378,13 +381,14 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
       const outcome = await distillProfile(ctx, limits, { corpus, route, session, signal: exec.signal })
       const profile = args.skillName === undefined ? outcome.profile : { ...outcome.profile, name: args.skillName }
       const skillsRoot = resolveRoot(options.skillsRoot, exec.agent?.session.header.cwd)
-      const skillPath = await writeSkillFile(ctx, skillsRoot, profile, exec.signal)
+      const written = await writeSkillFile(ctx, skillsRoot, profile, exec.signal)
       const value: BuildSkillValue = {
         source: corpus.source,
         userID: corpus.userID,
         ...corpus.userName === undefined ? {} : { userName: corpus.userName },
         skillName: profile.name,
-        skillPath,
+        skillPath: written.skillPath,
+        portraitPath: written.portraitPath,
         description: profile.description,
         posts: corpus.posts.length,
         postsWithBody: corpus.posts.filter(post => post.bodyMarkdown !== undefined).length,
@@ -492,7 +496,8 @@ function formatBuildSkill(value: BuildSkillValue): string {
   return [
     `Built skill \`${value.skillName}\` from ${value.posts} posts (${value.postsWithBody} with bodies) `
     + `and ${value.replies} replies of ${value.source} blogger ${value.userID}.`,
-    `File: ${value.skillPath}`,
+    `Procedure: ${value.skillPath}`,
+    `Evidence: ${value.portraitPath}`,
     `Description: ${value.description}`,
     `Corpus digest: ${value.digestChars} characters${value.digestTruncated ? ' (truncated)' : ''}.`,
   ].join('\n')

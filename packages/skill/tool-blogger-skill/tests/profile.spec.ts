@@ -133,7 +133,8 @@ describe('parseProfile', () => {
     expect(parseProfile(profileAnswer())).toEqual({
       name: 'stub-blogger-buy-the-dip',
       description: 'Consult when judging a stub blogger\'s dip-buying rules.',
-      content: '## Rules\n\n- Wait for volume before buying.',
+      skill: '## When this applies\n\n- In a falling market with volume.\n\n## Rules\n\n- Wait for volume before buying.',
+      portrait: '## Worldview\n\n- The blogger buys dips on volume.',
     })
   })
 
@@ -149,8 +150,10 @@ describe('parseProfile', () => {
     ['a missing name', profileAnswer({ name: 5 }), /kebab-case skill name/],
     ['an empty description', profileAnswer({ description: '   ' }), /no "description" string/],
     ['a non-string description', profileAnswer({ description: 5 }), /no "description" string/],
-    ['an empty content', profileAnswer({ content: '  ' }), /no "content" string/],
-    ['a non-string content', profileAnswer({ content: 5 }), /no "content" string/],
+    ['an empty skill', profileAnswer({ skill: '  ' }), /no "skill" string/],
+    ['a non-string skill', profileAnswer({ skill: 5 }), /no "skill" string/],
+    ['an empty portrait', profileAnswer({ portrait: '  ' }), /no "portrait" string/],
+    ['a non-string portrait', profileAnswer({ portrait: 5 }), /no "portrait" string/],
   ])('rejects %s', (_label, answer, expected) => {
     expect(() => parseProfile(answer))
       .toThrow(expect.objectContaining({ code: 'BLOGGER_PROFILE_INVALID', message: expect.stringMatching(expected) as string }))
@@ -158,11 +161,12 @@ describe('parseProfile', () => {
 })
 
 describe('renderSkillFile', () => {
-  it('writes frontmatter whose description survives YAML quoting', () => {
+  it('writes frontmatter whose description survives YAML quoting, and points at the portrait', () => {
     const file = renderSkillFile({
       name: 'stub-blogger',
       description: 'Use when asking: what would the stub blogger do?',
-      content: '# Profile',
+      skill: '# Procedure\n\n- Act.',
+      portrait: '# Portrait',
     })
     expect(file).toBe([
       '---',
@@ -170,7 +174,13 @@ describe('renderSkillFile', () => {
       'description: "Use when asking: what would the stub blogger do?"',
       '---',
       '',
-      '# Profile',
+      '# Procedure',
+      '',
+      '- Act.',
+      '',
+      '---',
+      '',
+      'Evidence, quotes, and cases behind these rules: [`portrait.md`](portrait.md).',
       '',
     ].join('\n'))
   })
@@ -250,19 +260,22 @@ describe('distillProfile', () => {
 })
 
 describe('writeSkillFile', () => {
-  it('writes SKILL.md under the name directory and returns its path', async () => {
+  it('writes the procedure and its evidence portrait under the name directory', async () => {
     const root = tempRoot('blogger-skill')
     try {
       const ctx = new Context()
       await ctx.plugin(LocalFileSystem)
-      const path = await writeSkillFile(ctx, root.path, {
+      const written = await writeSkillFile(ctx, root.path, {
         name: 'stub-blogger',
         description: 'A stub.',
-        content: '# Profile',
+        skill: '- Act.',
+        portrait: '# Portrait',
       }, testSignal)
 
-      expect(path).toBe(join(root.path, 'stub-blogger', 'SKILL.md'))
-      await expect(ctx.fs.readText(await ctx.fs.resolve(path))).resolves.toContain('name: stub-blogger')
+      expect(written.skillPath).toBe(join(root.path, 'stub-blogger', 'SKILL.md'))
+      expect(written.portraitPath).toBe(join(root.path, 'stub-blogger', 'portrait.md'))
+      await expect(ctx.fs.readText(await ctx.fs.resolve(written.skillPath))).resolves.toContain('name: stub-blogger')
+      await expect(ctx.fs.readText(await ctx.fs.resolve(written.portraitPath))).resolves.toBe('# Portrait\n')
     } finally {
       root.remove()
     }
