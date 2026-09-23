@@ -18,7 +18,7 @@ import type {
 } from '@deepseek-ai/dsh-blogger'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { LlmAdapter } from '@deepseek-ai/dsh-llm'
-import { EVIDENCE_MARKER, PROCEDURE_MARKER } from '../src/profile.ts'
+import { EVIDENCE_MARKER, EVIDENCE_SYSTEM_PROMPT, PROCEDURE_MARKER } from '../src/profile.ts'
 
 /** Build a text-only response stream. */
 export function textResponse(text: string): StreamChunk[] {
@@ -46,6 +46,28 @@ export class ScriptedAdapter extends LlmAdapter {
   override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push(options)
     for (const chunk of this.script) yield chunk
+  }
+}
+
+/** An LLM adapter that answers the evidence pass and the merge pass differently. */
+export class RoutingAdapter extends LlmAdapter {
+  readonly requests: GenerateOptions[] = []
+
+  constructor(
+    private readonly evidence = '### 情绪周期\n- 追涨杀跌（2011-04-13）',
+    private readonly profile = profileAnswer(),
+  ) {
+    super()
+  }
+
+  override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    return Promise.resolve({ provider, id: model, name: model })
+  }
+
+  override async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    this.requests.push(options)
+    const answer = options.system === EVIDENCE_SYSTEM_PROMPT ? this.evidence : this.profile
+    for (const chunk of textResponse(answer)) yield chunk
   }
 }
 

@@ -4,6 +4,7 @@
  * and failure handling.
  */
 
+import { readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -15,14 +16,13 @@ import {
   DISTILL_SYSTEM_PROMPT,
   distillProfile,
   parseProfile,
-  renderDigest,
   renderSkillFile,
   resolveRoute,
   writeSkillFile,
 } from '../src/profile.ts'
 import type { BloggerDistillRequestEventData, DistillSession } from '../src/profile.ts'
 import type { BloggerCorpus } from '../src/types.ts'
-import { profileAnswer, ScriptedAdapter, tempRoot, textResponse } from './helpers.ts'
+import { profileAnswer, RoutingAdapter, ScriptedAdapter, tempRoot, textResponse } from './helpers.ts'
 
 const testSignal = new AbortController().signal
 
@@ -83,32 +83,6 @@ function stubSession(route?: { provider: string; model: string }): {
     },
   }
 }
-
-describe('renderDigest', () => {
-  it('renders the header, every post, and every reply', () => {
-    const { digest, truncated } = renderDigest(CORPUS, 100_000)
-    expect(truncated).toBe(false)
-    expect(digest).toContain('# 博主 Stub Blogger（stub）')
-    expect(digest).toContain('主页：https://stub.example/905478')
-    expect(digest).toContain('主贴 2 篇（其中 1 篇有正文），跟帖 1 条')
-    expect(digest).toContain('## 2026-01-02 《First call》')
-    expect(digest).toContain('I bought the dip on volume.')
-    expect(digest).toContain('(未采集正文)')
-    expect(digest).toContain('- 2026-01-03 09:00 I would wait for volume — 来自《Someone else》')
-  })
-
-  it('falls back to the user id when no display name is stored', () => {
-    const { source, userID, updatedAt, posts, replies } = CORPUS
-    expect(renderDigest({ source, userID, updatedAt, posts, replies }, 100_000).digest).toContain('# 博主 905478（stub）')
-  })
-
-  it('stops at the bound and reports the cut', () => {
-    const { digest, truncated } = renderDigest(CORPUS, 40)
-    expect(truncated).toBe(true)
-    expect(digest.length).toBeLessThanOrEqual(40)
-    expect(digest).not.toContain('Second call')
-  })
-})
 
 describe('resolveRoute', () => {
   it('prefers the configured pair', () => {
@@ -203,13 +177,15 @@ describe('distillProfile', () => {
     const { ctx, adapter } = await mountLlm(textResponse(profileAnswer()))
     const { session, appended } = stubSession()
 
-    const outcome = await distillProfile(ctx, { maxPromptChars: 100_000, maxOutputTokens: 4_000 }, {
-      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, session, signal: testSignal,
+    const outcome = await distillProfile(ctx, { maxPromptTokens: 100_000, maxOutputTokens: 4_000 }, {
+      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, session,
+      notesRoot: '/notes', signal: testSignal,
     })
 
     expect(outcome.profile.name).toBe('stub-blogger-buy-the-dip')
-    expect(outcome.digestTruncated).toBe(false)
-    expect(outcome.digestChars).toBeGreaterThan(0)
+    expect(outcome.passes).toBe(1)
+    expect(outcome.notesReused).toBe(0)
+    expect(outcome.evidenceChars).toBeGreaterThan(0)
     expect(appended).toHaveLength(1)
     expect(appended[0]).toMatchObject({
       source: 'stub',
@@ -233,21 +209,102 @@ describe('distillProfile', () => {
       { type: 'usage', usage: { inputTokens: 10, outputTokens: 5 } },
       { type: 'finish', reason: { kind: 'stop' } },
     ])
-    const outcome = await distillProfile(ctx, { maxPromptChars: 100_000, maxOutputTokens: 4_000 }, {
-      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, signal: testSignal,
+    const outcome = await distillProfile(ctx, { maxPromptTokens: 100_000, maxOutputTokens: 4_000 }, {
+      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, notesRoot: '/notes', signal: testSignal,
     })
 
     expect(outcome.profile.name).toBe('stub-blogger-buy-the-dip')
   })
 
-  it('dispatches without a session and reports a cut digest', async () => {
+  it('dispatches without a session', async () => {
     const { ctx, adapter } = await mountLlm(textResponse(profileAnswer()))
-    const outcome = await distillProfile(ctx, { maxPromptChars: 30, maxOutputTokens: 4_000 }, {
-      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, signal: testSignal,
+    const outcome = await distillProfile(ctx, { maxPromptTokens: 100_000, maxOutputTokens: 4_000 }, {
+      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, notesRoot: '/notes', signal: testSignal,
     })
 
-    expect(outcome.digestTruncated).toBe(true)
+    expect(outcome.passes).toBe(1)
     expect(adapter.requests[0]?.sessionId).toBeUndefined()
+  })
+
+  it('reads a corpus beyond the budget window by window, then merges the notes', async () => {
+    const root = tempRoot('blogger-notes')
+    try {
+      const ctx = new Context()
+      await ctx.plugin(LocalFileSystem)
+      await ctx.plugin(LlmRuntime)
+      const adapter = new RoutingAdapter()
+      ctx.llm.registerAdapter(['stub-provider'], adapter)
+      const large: BloggerCorpus = {
+        ...CORPUS,
+        replies: Array.from({ length: 20 }, (_, index) => ({
+          id: `other/${index}`,
+          url: `https://stub.example/a/other/${index}`,
+          topicTitle: 'Someone else',
+          topicUrl: 'https://stub.example/a/other',
+          repliedAt: '2026-01-03 09:00',
+          body: '追涨杀跌'.repeat(20),
+        })),
+      }
+      const request = {
+        corpus: large,
+        route: { provider: 'stub-provider', model: 'stub-model' },
+        notesRoot: root.path,
+        signal: testSignal,
+      }
+
+      const first = await distillProfile(ctx, { maxPromptTokens: 400, maxOutputTokens: 4_000 }, request)
+
+      expect(first.notesReused).toBe(0)
+      expect(first.passes).toBeGreaterThan(1)
+      // Every window note, then one merge pass.
+      expect(first.passes).toBe(adapter.requests.length)
+      expect(adapter.requests.at(-1)?.system).toBe(DISTILL_SYSTEM_PROMPT)
+
+      const reused = await distillProfile(ctx, { maxPromptTokens: 400, maxOutputTokens: 4_000 }, request)
+
+      expect(reused.passes).toBe(1)
+      expect(reused.notesReused).toBe(first.passes - 1)
+
+      // An empty stored note is not evidence, so that window is read again.
+      const notes = readdirSync(join(root.path, 'stub-905478'))
+      writeFileSync(join(root.path, 'stub-905478', notes[0]!), '')
+      const emptied = await distillProfile(ctx, { maxPromptTokens: 400, maxOutputTokens: 4_000 }, request)
+
+      expect(emptied.notesReused).toBe(first.passes - 2)
+      expect(emptied.passes).toBe(2)
+    } finally {
+      root.remove()
+    }
+  })
+
+  it('fails loud when the merged notes exceed the request budget', async () => {
+    const root = tempRoot('blogger-notes')
+    try {
+      const ctx = new Context()
+      await ctx.plugin(LocalFileSystem)
+      await ctx.plugin(LlmRuntime)
+      ctx.llm.registerAdapter(['stub-provider'], new RoutingAdapter('追涨杀跌'.repeat(200)))
+      const large: BloggerCorpus = {
+        ...CORPUS,
+        replies: Array.from({ length: 20 }, (_, index) => ({
+          id: `other/${index}`,
+          url: `https://stub.example/a/other/${index}`,
+          topicTitle: 'Someone else',
+          topicUrl: 'https://stub.example/a/other',
+          repliedAt: '2026-01-03 09:00',
+          body: '追涨杀跌'.repeat(20),
+        })),
+      }
+
+      await expect(distillProfile(ctx, { maxPromptTokens: 400, maxOutputTokens: 4_000 }, {
+        corpus: large,
+        route: { provider: 'stub-provider', model: 'stub-model' },
+        notesRoot: root.path,
+        signal: testSignal,
+      })).rejects.toThrow(expect.objectContaining({ code: 'BLOGGER_EVIDENCE_TOO_LARGE' }))
+    } finally {
+      root.remove()
+    }
   })
 
   it.each([
@@ -256,8 +313,8 @@ describe('distillProfile', () => {
     ['an unsupported reason', { type: 'finish', reason: { kind: 'invented' } }, /unsupported finish reason/],
   ])('fails the profile grammar on %s', async (_label, chunk, expected) => {
     const { ctx } = await mountLlm([chunk as StreamChunk])
-    await expect(distillProfile(ctx, { maxPromptChars: 100_000, maxOutputTokens: 4_000 }, {
-      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, signal: testSignal,
+    await expect(distillProfile(ctx, { maxPromptTokens: 100_000, maxOutputTokens: 4_000 }, {
+      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, notesRoot: '/notes', signal: testSignal,
     })).rejects.toThrow(expect.objectContaining({ code: 'BLOGGER_PROFILE_INVALID', message: expect.stringMatching(expected) as string }))
   })
 
@@ -265,8 +322,8 @@ describe('distillProfile', () => {
     const { ctx } = await mountLlm([
       { type: 'finish', reason: { kind: 'error', failure: { message: 'upstream exploded', code: 'STUB_UPSTREAM' } } },
     ])
-    await expect(distillProfile(ctx, { maxPromptChars: 100_000, maxOutputTokens: 4_000 }, {
-      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, signal: testSignal,
+    await expect(distillProfile(ctx, { maxPromptTokens: 100_000, maxOutputTokens: 4_000 }, {
+      corpus: CORPUS, route: { provider: 'stub-provider', model: 'stub-model' }, notesRoot: '/notes', signal: testSignal,
     })).rejects.toThrow(expect.objectContaining({ code: 'STUB_UPSTREAM', message: expect.stringContaining('upstream exploded') as string }))
   })
 })

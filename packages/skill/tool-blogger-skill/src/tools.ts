@@ -8,7 +8,7 @@
  * @module @deepseek-ai/dsh-tool-blogger-skill/tools
  */
 
-import { isAbsolute, resolve as resolvePath } from 'node:path'
+import { isAbsolute, join, resolve as resolvePath } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { BloggerPostSummary, BloggerRef, BloggerResolution } from '@deepseek-ai/dsh-blogger'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
@@ -107,10 +107,14 @@ export interface BuildSkillValue {
   readonly postsWithBody: number
   /** Replies the corpus held. */
   readonly replies: number
-  /** Characters in the corpus digest sent to the model. */
-  readonly digestChars: number
-  /** Whether the digest was cut before the corpus was exhausted. */
-  readonly digestTruncated: boolean
+  /** Characters of corpus evidence sent across every distillation pass. */
+  readonly evidenceChars: number
+  /** Model requests the distillation made: one per window, plus the merge. */
+  readonly passes: number
+  /** Windows whose evidence notes were reused from disk. */
+  readonly notesReused: number
+  /** Directory holding the per-window evidence notes. */
+  readonly notesPath: string
 }
 
 /** The footer appended when a rendered output was cut. */
@@ -346,8 +350,10 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
           posts: { type: 'integer', required: true },
           postsWithBody: { type: 'integer', required: true },
           replies: { type: 'integer', required: true },
-          digestChars: { type: 'integer', required: true },
-          digestTruncated: { type: 'boolean', required: true },
+          evidenceChars: { type: 'integer', required: true },
+          passes: { type: 'integer', required: true },
+          notesReused: { type: 'integer', required: true },
+          notesPath: { type: 'string', required: true },
         },
       },
       render: (_args, value) => boundedText(formatBuildSkill(value), limits.maxOutputChars),
@@ -377,10 +383,12 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
         )
       }
       const session = exec.agent?.session
+      const cwd = exec.agent?.session.header.cwd
       const route: ModelRoute = resolveRoute(options.route, session)
-      const outcome = await distillProfile(ctx, limits, { corpus, route, session, signal: exec.signal })
+      const notesRoot = join(resolveRoot(options.corpusRoot, cwd), 'notes')
+      const outcome = await distillProfile(ctx, limits, { corpus, route, session, notesRoot, signal: exec.signal })
       const profile = args.skillName === undefined ? outcome.profile : { ...outcome.profile, name: args.skillName }
-      const skillsRoot = resolveRoot(options.skillsRoot, exec.agent?.session.header.cwd)
+      const skillsRoot = resolveRoot(options.skillsRoot, cwd)
       const written = await writeSkillFile(ctx, skillsRoot, profile, exec.signal)
       const value: BuildSkillValue = {
         source: corpus.source,
@@ -393,8 +401,10 @@ export function applyBloggerTools(ctx: Context, options: BloggerToolOptions, lim
         posts: corpus.posts.length,
         postsWithBody: corpus.posts.filter(post => post.bodyMarkdown !== undefined).length,
         replies: corpus.replies.length,
-        digestChars: outcome.digestChars,
-        digestTruncated: outcome.digestTruncated,
+        evidenceChars: outcome.evidenceChars,
+        passes: outcome.passes,
+        notesReused: outcome.notesReused,
+        notesPath: join(notesRoot, `${corpus.source}-${corpus.userID}`),
       }
       return value
     },
@@ -499,6 +509,7 @@ function formatBuildSkill(value: BuildSkillValue): string {
     `Procedure: ${value.skillPath}`,
     `Evidence: ${value.portraitPath}`,
     `Description: ${value.description}`,
-    `Corpus digest: ${value.digestChars} characters${value.digestTruncated ? ' (truncated)' : ''}.`,
+    `Evidence read: ${value.evidenceChars} characters in ${value.passes} model request(s)`
+    + `${value.notesReused === 0 ? '' : `, ${value.notesReused} window note(s) reused from ${value.notesPath}`}.`,
   ].join('\n')
 }

@@ -328,7 +328,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'blogger/distill-request': BloggerDistillRequestEventData
 ```
 
-来源：[`packages/skill/tool-blogger-skill/src/profile.ts:92`](../packages/skill/tool-blogger-skill/src/profile.ts)
+来源：[`packages/skill/tool-blogger-skill/src/profile.ts:98`](../packages/skill/tool-blogger-skill/src/profile.ts)
 
 ### `command/*`
 
@@ -3127,7 +3127,7 @@ SHA-256: `658d895d187b26d83f3b53109a3bf77bbfba9f6f9a6d4bc4ee4315b4eb36239e`
 
 SHA-256: `cc4fa7145482720b682d33f2d418590c470109ff730fe9daa3c7f65c08055d6f`
 
-来源：[`packages/skill/tool-blogger-skill/src/profile.ts:74`](../packages/skill/tool-blogger-skill/src/profile.ts)
+来源：[`packages/skill/tool-blogger-skill/src/profile.ts:80`](../packages/skill/tool-blogger-skill/src/profile.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -4558,7 +4558,7 @@ SHA-256: `9bc85364d1f37d9c837db6a3bdd3d1d007d923cdc7401a3322be9f12fdc225fd`
 
 SHA-256: `07e1a58c58b593f507b8e7f25723bb0aa42baae6e00f5ecfddf28cb1e64d3235`
 
-来源：[`packages/session/session-title/src/types.ts:20`](../packages/session/session-title/src/types.ts) · [`packages/skill/tool-blogger-skill/src/profile.ts:23`](../packages/skill/tool-blogger-skill/src/profile.ts) · [`packages/subagent/tool-subagent/src/model-selection.ts:9`](../packages/subagent/tool-subagent/src/model-selection.ts)
+来源：[`packages/session/session-title/src/types.ts:20`](../packages/session/session-title/src/types.ts) · [`packages/skill/tool-blogger-skill/src/profile.ts:25`](../packages/skill/tool-blogger-skill/src/profile.ts) · [`packages/subagent/tool-subagent/src/model-selection.ts:9`](../packages/subagent/tool-subagent/src/model-selection.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|

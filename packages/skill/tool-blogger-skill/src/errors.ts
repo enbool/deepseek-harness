@@ -25,6 +25,9 @@ export const BLOGGER_PROFILE_INVALID = 'BLOGGER_PROFILE_INVALID'
 /** `BLOGGER_CONFIG_INVALID` — the plugin config names an incomplete distillation route. */
 export const BLOGGER_CONFIG_INVALID = 'BLOGGER_CONFIG_INVALID'
 
+/** `BLOGGER_EVIDENCE_TOO_LARGE` — the merged window notes exceed one request's token budget. */
+export const BLOGGER_EVIDENCE_TOO_LARGE = 'BLOGGER_EVIDENCE_TOO_LARGE'
+
 /** One blogger-harvest or distillation failure, carrying one of the module's stable codes. */
 export class BloggerSkillError extends HarnessError {
   /**

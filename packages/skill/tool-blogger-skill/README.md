@@ -52,7 +52,7 @@ Choose this package when a user names a 大V blogger and wants that blogger's re
 | `maxPostPages` / `maxReplyPages` | `3` | Page budget for one harvest's post and reply collection; the tools reject larger arguments |
 | `maxPosts` | `20` | Post bodies one harvest may fetch; the tools reject a larger argument |
 | `maxCorpusPosts` / `maxCorpusReplies` | `300` / `600` | Records one corpus retains |
-| `maxPromptChars` | `400000` | Character budget for the corpus digest sent to the model |
+| `maxPromptTokens` | `60000` | Estimated-token budget for one request; a corpus beyond it is read window by window |
 | `maxOutputTokens` | `16000` | Output-token cap for the distillation request |
 | `maxOutputChars` | `20000` | Cap on one complete rendered tool output |
 | `timeoutMs` | `600000` | Cooperative tool-call timeout budget (ms) |
@@ -60,7 +60,7 @@ Choose this package when a user names a 大V blogger and wants that blogger's re
 ### The two tools
 
 - `blogger_harvest` — resolve `user` (or `user` plus an explicit `source`) and collect one page window. `postStartPage` and `replyStartPage` choose where each list begins, so a second call reaches pages the first could not. It merges into the stored corpus, keeps a body an earlier harvest already fetched, and returns the corpus totals, the per-call additions, and the pagination facts including the page to pass next.
-- `blogger_build_skill` — read that corpus and distill it into two files. `SKILL.md` is the product: an imperative operating procedure covering when the method applies, the decision spine, the judgement rules, execution, position sizing, refusals, and a pre-trade checklist. `portrait.md` beside it carries the quotes, dates, and cases that license those rules, and `SKILL.md` links to it. `skillName` overrides the model's proposed name; the files land under `<skillsRoot>/<skillName>/`.
+- `blogger_build_skill` — read that corpus and distill it into two files. A corpus that fits `maxPromptTokens` is read in one pass; a larger one is read window by window, each window writing an evidence note under `<corpusRoot>/notes/<source>-<userID>/`, and one merge pass turns the notes into the skill. An unchanged window's note is reused instead of regenerated. `SKILL.md` is the product: an imperative operating procedure covering when the method applies, the decision spine, the judgement rules, execution, position sizing, refusals, and a pre-trade checklist. `portrait.md` beside it carries the quotes, dates, and cases that license those rules, and `SKILL.md` links to it. `skillName` overrides the model's proposed name; the files land under `<skillsRoot>/<skillName>/`.
 
 ### The corpus
 
@@ -104,7 +104,7 @@ One JSON file per blogger, named `<source>-<userID>.json` under `corpusRoot`. Re
 
 ### Distillation flow
 
-`blogger_build_skill` renders a bounded digest of the corpus, appends the exact request to the session log, streams `ctx.llm`, checks the terminal finish reason, parses the answer, and writes both files. The request is hand-built rather than loop-built, so it carries its own system prompt, is deep-frozen, and is never marked as a loop request. One call produces both documents because they must agree: the procedure states the rules, and the portrait holds the evidence for exactly those rules. The answer carries a one-object JSON header holding the name and description, then the two documents as plain markdown between two marker lines — a document that long cannot survive JSON string escaping. A failed parse reports the first 300 characters the model actually wrote, so the next call can correct it.
+`blogger_build_skill` renders the corpus as ordered blocks, groups them into windows under `maxPromptTokens`, reads each window into an evidence note, and merges the notes into the two documents. Every request is hand-built rather than loop-built, so it carries its own system prompt, is deep-frozen, and is never marked as a loop request. The merge pass produces both documents because they must agree: the procedure states the rules, and the portrait holds the evidence for exactly those rules. The merge answer carries a one-object JSON header holding the name and description, then the two documents as plain markdown between two marker lines — a document that long cannot survive JSON string escaping. A failed parse reports the first 300 characters the model actually wrote, so the next call can correct it.
 
 </details>
 
@@ -140,7 +140,7 @@ Prefix-stable while the tools are registered. Plugin lifecycle changes may inval
 
 #### What the model sees
 
-`blogger_harvest` renders a summary line naming the source, user id, display name, post and body counts, and reply count, then a line reporting what this call added and which page window it read, then — while either list still has more — the exact `postStartPage` or `replyStartPage` to pass next, then the corpus path. `blogger_build_skill` renders the skill name, the counts it distilled, the procedure path, the portrait path, the description, and the digest size. A cut output ends with `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)`; failures become `Error: <message>`.
+`blogger_harvest` renders a summary line naming the source, user id, display name, post and body counts, and reply count, then a line reporting what this call added and which page window it read, then — while either list still has more — the exact `postStartPage` or `replyStartPage` to pass next, then the corpus path. `blogger_build_skill` renders the skill name, the counts it distilled, the procedure path, the portrait path, the description, and how much evidence it read in how many model requests. A cut output ends with `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)`; failures become `Error: <message>`.
 
 #### Token effect
 
@@ -158,8 +158,8 @@ These limits are current package constraints.
 
 - **The model reads counts, not content** — the tool results carry no harvested text, so the model cannot judge the corpus itself; it can only decide whether to harvest more or to distill. A user who wants to read the writing uses the source's own tools.
 - **Regeneration overwrites** — `blogger_build_skill` writes `<skillsRoot>/<name>/SKILL.md` and its `portrait.md` unconditionally, so regenerating under an existing name replaces both files with no merge and no confirmation.
-- **The procedure is only as good as the corpus** — a blogger with a handful of posts yields rules the model cannot ground in repeated behaviour, and the package cannot tell a thin corpus from a rich one. The procedure's own "when this applies" section is the model's honest statement of that; the session log records the digest size.
-- **The digest is a straight truncation** — `maxPromptChars` cuts the corpus at a block boundary, so a very large corpus loses its oldest posts and replies from the prompt without the model being told which ones went missing beyond the `digestTruncated` flag.
+- **The procedure is only as good as the corpus** — a blogger with a handful of posts yields rules the model cannot ground in repeated behaviour, and the package cannot tell a thin corpus from a rich one. The procedure's own "when this applies" section is the model's honest statement of that; the session log records the evidence size and the pass count.
+- **A corpus beyond one request is read in windows** — the merge pass reads every window note, so a corpus large enough to need very many windows eventually exceeds that budget and fails loud with `BLOGGER_EVIDENCE_TOO_LARGE` rather than sending a truncated request. A hierarchical merge is the deferred fix.
 - **Distillation is single-attempt** — the request is a hand-built `ctx.llm.stream` call, which never retries; a provider failure surfaces to the model, which must call the tool again.
 
 <a id="dev-note"></a>

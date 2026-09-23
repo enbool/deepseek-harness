@@ -24832,7 +24832,7 @@
       ],
       "sources": [
         "packages/session/session-title/src/types.ts:20",
-        "packages/skill/tool-blogger-skill/src/profile.ts:23",
+        "packages/skill/tool-blogger-skill/src/profile.ts:25",
         "packages/subagent/tool-subagent/src/model-selection.ts:9"
       ]
     },
@@ -86122,7 +86122,7 @@
         "packages/skill/tool-blogger-skill/src/profile.ts#BloggerDistillRequestEventData"
       ],
       "sources": [
-        "packages/skill/tool-blogger-skill/src/profile.ts:74"
+        "packages/skill/tool-blogger-skill/src/profile.ts:80"
       ]
     },
     {

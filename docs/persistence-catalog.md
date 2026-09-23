@@ -326,7 +326,7 @@ Source: [`packages/core/session/src/types.ts:341`](../packages/core/session/src/
 'blogger/distill-request': BloggerDistillRequestEventData
 ```
 
-Source: [`packages/skill/tool-blogger-skill/src/profile.ts:92`](../packages/skill/tool-blogger-skill/src/profile.ts)
+Source: [`packages/skill/tool-blogger-skill/src/profile.ts:98`](../packages/skill/tool-blogger-skill/src/profile.ts)
 
 ### `command/*`
 
@@ -3125,7 +3125,7 @@ Sources: [`packages/schedule/schedule/src/types.ts:29`](../packages/schedule/sch
 
 SHA-256: `cc4fa7145482720b682d33f2d418590c470109ff730fe9daa3c7f65c08055d6f`
 
-Sources: [`packages/skill/tool-blogger-skill/src/profile.ts:74`](../packages/skill/tool-blogger-skill/src/profile.ts)
+Sources: [`packages/skill/tool-blogger-skill/src/profile.ts:80`](../packages/skill/tool-blogger-skill/src/profile.ts)
 
 | Property | Presence | Type |
 |---|---|---|
@@ -4556,7 +4556,7 @@ Sources: [`packages/session/session-title-llm/src/index.ts:34`](../packages/sess
 
 SHA-256: `07e1a58c58b593f507b8e7f25723bb0aa42baae6e00f5ecfddf28cb1e64d3235`
 
-Sources: [`packages/session/session-title/src/types.ts:20`](../packages/session/session-title/src/types.ts) · [`packages/skill/tool-blogger-skill/src/profile.ts:23`](../packages/skill/tool-blogger-skill/src/profile.ts) · [`packages/subagent/tool-subagent/src/model-selection.ts:9`](../packages/subagent/tool-subagent/src/model-selection.ts)
+Sources: [`packages/session/session-title/src/types.ts:20`](../packages/session/session-title/src/types.ts) · [`packages/skill/tool-blogger-skill/src/profile.ts:25`](../packages/skill/tool-blogger-skill/src/profile.ts) · [`packages/subagent/tool-subagent/src/model-selection.ts:9`](../packages/subagent/tool-subagent/src/model-selection.ts)
 
 | Property | Presence | Type |
 |---|---|---|

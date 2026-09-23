@@ -7,17 +7,19 @@
  * @module @deepseek-ai/dsh-tool-blogger-skill/profile
  */
 
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { BloggerReply } from '@deepseek-ai/dsh-blogger'
 import type { FinishReason, GenerateOptions, RequestMessage } from '@deepseek-ai/dsh-llm'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-fs'
 import { isSkillName } from '@deepseek-ai/dsh-skill'
 import { deepFreeze } from '@deepseek-ai/dsh-util-values'
-import { BLOGGER_DISTILL_ROUTE_UNSET, BLOGGER_PROFILE_INVALID, BloggerSkillError } from './errors.ts'
-import type { BloggerCorpus, BloggerProfile, CorpusPost } from './types.ts'
+import { chunkBlocks, digestBlocks, estimateTokens } from './chunk.ts'
+import type { DigestChunk } from './chunk.ts'
+import { BLOGGER_DISTILL_ROUTE_UNSET, BLOGGER_EVIDENCE_TOO_LARGE, BLOGGER_PROFILE_INVALID, BloggerSkillError } from './errors.ts'
+import type { BloggerCorpus, BloggerProfile } from './types.ts'
 
 /** The model route one distillation dispatches through. */
 export interface ModelRoute {
@@ -29,9 +31,9 @@ export interface ModelRoute {
 
 /** Deployment-owned bounds one distillation honors. */
 export interface DistillLimits {
-  /** Maximum characters in the corpus digest sent as the user message. */
-  readonly maxPromptChars: number
-  /** Output-token cap for the distillation request. */
+  /** Estimated-token budget for one model request; a larger corpus is read in several windows. */
+  readonly maxPromptTokens: number
+  /** Output-token cap for each model request. */
   readonly maxOutputTokens: number
 }
 
@@ -43,6 +45,8 @@ export interface DistillRequest {
   readonly route: ModelRoute
   /** The session to record the request in, when the call runs for one. */
   readonly session?: DistillSession | undefined
+  /** Directory the per-window evidence notes are written under. */
+  readonly notesRoot: string
   /** Cancellation signal. */
   readonly signal: AbortSignal
 }
@@ -64,10 +68,12 @@ export interface DistillSession {
 export interface DistillOutcome {
   /** The parsed profile. */
   readonly profile: BloggerProfile
-  /** Characters in the rendered corpus digest. */
-  readonly digestChars: number
-  /** Whether the digest hit `maxPromptChars` before the corpus was exhausted. */
-  readonly digestTruncated: boolean
+  /** Characters of corpus evidence sent across every pass. */
+  readonly evidenceChars: number
+  /** Model requests this distillation made: one per window, plus the merge. */
+  readonly passes: number
+  /** Windows whose evidence notes were reused from disk instead of regenerated. */
+  readonly notesReused: number
 }
 
 /** Exact model-visible request recorded before one blogger distillation dispatch. */
@@ -156,6 +162,23 @@ const OUTPUT_CONTRACT = [
 export const PORTRAIT_FILE = 'portrait.md'
 
 /**
+ * The evidence-pass instructions: one bounded window of the corpus in, one terse
+ * evidence note out. The merge pass reads the notes rather than the corpus, so a
+ * note must carry the evidence and nothing that only decorates it.
+ */
+export const EVIDENCE_SYSTEM_PROMPT = [
+  'You read one window of an investor\'s published writing and record the evidence it holds.',
+  'This window is one of several; a later pass merges your note with the others.',
+  'Write a terse evidence note in markdown, in the language the investor writes in.',
+  'Record the rules this window states or follows, and for each one the verbatim quote,',
+  'the date, and the case that carries it. State a rule once, then list the passages supporting it.',
+  'Record nothing else: no summary of the writer, no praise, no restating of the corpus,',
+  'no speculation beyond the window, and nothing the window does not say.',
+  'Keep the note within about 120 lines.',
+  'Answer with the note markdown and nothing else: no preamble and no code fence.',
+].join(' ')
+
+/**
  * Resolve the model route for one distillation: the configured pair when both
  * fields are set, otherwise the target the session's latest request was routed to.
  *
@@ -181,48 +204,80 @@ export function resolveRoute(
 }
 
 /**
- * Render the bounded corpus digest.
+ * Distill one corpus into a skill. A corpus that fits the request budget is read
+ * in one pass; a larger one is read window by window, each window writing an
+ * evidence note, and one merge pass turns the notes into the skill. Every request
+ * is therefore bounded however large the corpus grows, and a note already on disk
+ * for an unchanged window is reused instead of regenerated.
  *
- * @param corpus - the corpus to render.
- * @param maxChars - the character bound on the rendered digest.
- * @returns the digest and whether it stopped before the corpus was exhausted.
- */
-export function renderDigest(corpus: BloggerCorpus, maxChars: number): { digest: string; truncated: boolean } {
-  const blocks = [renderHeader(corpus), ...corpus.posts.map(renderPost), ...corpus.replies.map(renderReply)]
-  const kept: string[] = []
-  let used = 0
-  for (const block of blocks) {
-    const cost = block.length + (kept.length === 0 ? 0 : 1)
-    if (used + cost > maxChars) return { digest: kept.join('\n'), truncated: true }
-    kept.push(block)
-    used += cost
-  }
-  return { digest: kept.join('\n'), truncated: false }
-}
-
-/**
- * Distill one corpus through `ctx.llm`, recording the exact request before dispatch.
- *
- * @param ctx - context exposing the LLM service.
- * @param limits - the digest and output-token bounds.
- * @param request - the corpus, route, session, and cancellation.
- * @returns the parsed profile and the digest facts.
+ * @param ctx - context exposing the LLM and filesystem services.
+ * @param limits - the request and output-token bounds.
+ * @param request - the corpus, route, session, notes directory, and cancellation.
+ * @returns the parsed profile and the pass facts.
  */
 export async function distillProfile(
   ctx: Context,
   limits: DistillLimits,
   request: DistillRequest,
 ): Promise<DistillOutcome> {
-  const { digest, truncated } = renderDigest(request.corpus, limits.maxPromptChars)
-  const messages: RequestMessage[] = [{
-    role: 'user',
-    content: [{ type: 'text', text: `${digest}\n\n${OUTPUT_CONTRACT}` }],
-  }]
+  const chunks = chunkBlocks(digestBlocks(request.corpus, limits.maxPromptTokens), limits.maxPromptTokens)
+  const evidenceChars = chunks.reduce((total, chunk) => total + chunk.text.length, 0)
+  const single = chunks.length === 1 ? chunks[0] : undefined
+  const notes: string[] = []
+  let passes = 0
+  let notesReused = 0
+  if (single !== undefined) {
+    notes.push(single.text)
+  } else {
+    for (const chunk of chunks) {
+      const stored = await readNote(ctx, request, chunk)
+      if (stored !== undefined) {
+        notes.push(stored)
+        notesReused += 1
+        continue
+      }
+      const note = await callModel(ctx, limits, request, EVIDENCE_SYSTEM_PROMPT, evidenceUserMessage(chunk, chunks.length))
+      passes += 1
+      await writeNote(ctx, request, chunk, note)
+      notes.push(note)
+    }
+  }
+  const merge = mergeUserMessage(notes, single === undefined)
+  if (estimateTokens(merge) > limits.maxPromptTokens) {
+    throw new BloggerSkillError(
+      `the ${chunks.length} evidence notes exceed the ${limits.maxPromptTokens}-token merge budget; raise maxPromptTokens or narrow the harvest`,
+      BLOGGER_EVIDENCE_TOO_LARGE,
+    )
+  }
+  const answer = await callModel(ctx, limits, request, DISTILL_SYSTEM_PROMPT, merge)
+  return { profile: parseProfile(answer), evidenceChars, passes: passes + 1, notesReused }
+}
+
+/**
+ * Run one recorded model request and return its visible text. The request is
+ * hand-built rather than loop-built, so it carries its own system prompt, is
+ * deep-frozen, is never marked as a loop request, and is logged before dispatch.
+ *
+ * @param ctx - context exposing the LLM service.
+ * @param limits - the output-token bound.
+ * @param request - the route, session, and cancellation.
+ * @param system - the exact system prompt.
+ * @param userText - the exact user message.
+ * @returns the answer's visible text.
+ */
+async function callModel(
+  ctx: Context,
+  limits: DistillLimits,
+  request: DistillRequest,
+  system: string,
+  userText: string,
+): Promise<string> {
+  const messages: RequestMessage[] = [{ role: 'user', content: [{ type: 'text', text: userText }] }]
   const options: GenerateOptions = deepFreeze({
     provider: request.route.provider,
     model: request.route.model,
     messages,
-    system: DISTILL_SYSTEM_PROMPT,
+    system,
     maxTokens: limits.maxOutputTokens,
     ...request.session === undefined ? {} : { sessionId: request.session.id },
     signal: request.signal,
@@ -231,16 +286,89 @@ export async function distillProfile(
     source: request.corpus.source,
     userID: request.corpus.userID,
     route: request.route,
-    system: DISTILL_SYSTEM_PROMPT,
+    system,
     messages,
     maxTokens: limits.maxOutputTokens,
   })
-
   const assembler = new BlockAssembler()
   for await (const chunk of ctx.llm.stream(options)) assembler.push(chunk)
   assertFinished(assembler.finish)
-  const answer = assembler.blocks().map(block => block.type === 'text' ? block.text : '').join('')
-  return { profile: parseProfile(answer), digestChars: digest.length, digestTruncated: truncated }
+  return assembler.blocks().map(block => block.type === 'text' ? block.text : '').join('')
+}
+
+/**
+ * The path one window's evidence note occupies. The window's content hash is part
+ * of the name, so a note is reused only while its window is unchanged.
+ *
+ * @param request - the distillation request owning the notes directory.
+ * @param chunk - the window the note documents.
+ * @returns the absolute note path.
+ */
+function notePath(request: DistillRequest, chunk: DigestChunk): string {
+  const hash = createHash('sha256').update(chunk.text).digest('hex').slice(0, 16)
+  return join(request.notesRoot, `${request.corpus.source}-${request.corpus.userID}`, `${chunk.index}-${hash}.md`)
+}
+
+/**
+ * Read one window's stored evidence note.
+ *
+ * @param ctx - context exposing the filesystem service.
+ * @param request - the distillation request owning the notes directory.
+ * @param chunk - the window the note documents.
+ * @returns the stored note, or `undefined` when none exists or it is empty.
+ */
+async function readNote(ctx: Context, request: DistillRequest, chunk: DigestChunk): Promise<string | undefined> {
+  const target = await ctx.fs.resolve(notePath(request, chunk), { signal: request.signal })
+  if (await ctx.fs.stat(target, request.signal) === undefined) return undefined
+  const stored = (await ctx.fs.readText(target, request.signal)).trim()
+  return stored.length === 0 ? undefined : stored
+}
+
+/**
+ * Write one window's evidence note.
+ *
+ * @param ctx - context exposing the filesystem service.
+ * @param request - the distillation request owning the notes directory.
+ * @param chunk - the window the note documents.
+ * @param note - the note's markdown.
+ */
+async function writeNote(ctx: Context, request: DistillRequest, chunk: DigestChunk, note: string): Promise<void> {
+  const target = await ctx.fs.resolve(notePath(request, chunk), { signal: request.signal })
+  await ctx.fs.writeText(target, `${note.trim()}\n`, undefined, request.signal)
+}
+
+/**
+ * Frame one window for the evidence pass.
+ *
+ * @param chunk - the window to read.
+ * @param total - how many windows the corpus was split into.
+ * @returns the exact user message.
+ */
+function evidenceUserMessage(chunk: DigestChunk, total: number): string {
+  return [
+    `This is window ${chunk.index} of ${total} of the corpus.`,
+    '',
+    chunk.text,
+    '',
+    'Write the evidence note for this window.',
+  ].join('\n')
+}
+
+/**
+ * Frame the merged evidence for the final pass.
+ *
+ * @param notes - the evidence notes, or the whole corpus when there is one window.
+ * @param fromNotes - whether the text is window notes rather than the raw corpus.
+ * @returns the exact user message, carrying the response contract.
+ */
+function mergeUserMessage(notes: readonly string[], fromNotes: boolean): string {
+  const framing = fromNotes
+    ? `The ${notes.length} evidence notes below were distilled from the full corpus, window by window. Work only from them.`
+    : 'The full corpus is below. Work only from it.'
+  const body = fromNotes
+    ? notes.map((note, index) => `--- note ${index + 1} ---\n${note}`).join('\n\n')
+    : notes.join('\n\n')
+  return `${framing}\n\n${body}\n\n${OUTPUT_CONTRACT}`
 }
 
 /**
@@ -262,7 +390,8 @@ export function parseProfile(answer: string): BloggerProfile {
   const evidenceAt = answer.indexOf(EVIDENCE_MARKER, procedureAt + PROCEDURE_MARKER.length)
   if (evidenceAt === -1) {
     throw invalidProfile(`the answer carried no ${EVIDENCE_MARKER} line`, answer)
-  }  const skill = unfence(answer.slice(procedureAt + PROCEDURE_MARKER.length, evidenceAt))
+  }
+  const skill = unfence(answer.slice(procedureAt + PROCEDURE_MARKER.length, evidenceAt))
   const portrait = unfence(answer.slice(evidenceAt + EVIDENCE_MARKER.length))
   if (skill.length === 0) throw invalidProfile('the answer carried an empty operating procedure', answer)
   if (portrait.length === 0) throw invalidProfile('the answer carried an empty evidence portrait', answer)
@@ -363,45 +492,6 @@ export async function writeSkillFile(
   const portraitTarget = await ctx.fs.resolve(portraitPath, { signal })
   await ctx.fs.writeText(portraitTarget, `${profile.portrait}\n`, undefined, signal)
   return { skillPath, portraitPath }
-}
-
-/**
- * Render the digest header naming the blogger and the collected volume.
- *
- * @param corpus - the corpus to describe.
- * @returns the header block.
- */
-function renderHeader(corpus: BloggerCorpus): string {
-  const withBody = corpus.posts.filter(post => post.bodyMarkdown !== undefined).length
-  return [
-    `# 博主 ${corpus.userName ?? corpus.userID}（${corpus.source}）`,
-    ...corpus.profileUrl === undefined ? [] : [`主页：${corpus.profileUrl}`],
-    `采集范围：主贴 ${corpus.posts.length} 篇（其中 ${withBody} 篇有正文），跟帖 ${corpus.replies.length} 条。`,
-  ].join('\n')
-}
-
-/**
- * Render one post block.
- *
- * @param post - the post to render.
- * @returns the block.
- */
-function renderPost(post: CorpusPost): string {
-  return [
-    `## ${post.publishedAt} 《${post.title}》`,
-    post.url,
-    post.bodyMarkdown ?? '(未采集正文)',
-  ].join('\n')
-}
-
-/**
- * Render one reply block.
- *
- * @param reply - the reply to render.
- * @returns the block.
- */
-function renderReply(reply: BloggerReply): string {
-  return `- ${reply.repliedAt} ${reply.body} — 来自《${reply.topicTitle}》 ${reply.topicUrl}`
 }
 
 /**

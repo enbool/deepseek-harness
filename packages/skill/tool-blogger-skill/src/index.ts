@@ -18,11 +18,15 @@ export {
   BLOGGER_CORPUS_INVALID,
   BLOGGER_CORPUS_MISSING,
   BLOGGER_DISTILL_ROUTE_UNSET,
+  BLOGGER_EVIDENCE_TOO_LARGE,
   BLOGGER_PROFILE_INVALID,
   BloggerSkillError,
 } from './errors.ts'
 export { applyBloggerTools } from './tools.ts'
 export type { BuildSkillValue, BloggerToolLimits, BloggerToolOptions, HarvestValue } from './tools.ts'
+export { chunkBlocks, digestBlocks, estimateTokens } from './chunk.ts'
+export type { DigestBlock, DigestChunk } from './chunk.ts'
+export { EVIDENCE_MARKER, PROCEDURE_MARKER } from './profile.ts'
 export { parseCorpus, serializeCorpus } from './corpus.ts'
 export type { BloggerCorpus, BloggerProfile, CorpusPost } from './types.ts'
 
@@ -53,8 +57,8 @@ export const DEFAULT_MAX_CORPUS_POSTS = 300
 /** Default retained-reply bound for one corpus. */
 export const DEFAULT_MAX_CORPUS_REPLIES = 600
 
-/** Default character budget for the corpus digest sent to the distillation model. */
-export const DEFAULT_MAX_PROMPT_CHARS = 400_000
+/** Default estimated-token budget for one distillation request. */
+export const DEFAULT_MAX_PROMPT_TOKENS = 60_000
 
 /** Default output-token cap for the distillation request. */
 export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000
@@ -85,8 +89,8 @@ export interface Config {
   readonly maxCorpusPosts?: number
   /** Maximum replies one corpus retains. Defaults to 600. */
   readonly maxCorpusReplies?: number
-  /** Character budget for the corpus digest. Defaults to 400000. */
-  readonly maxPromptChars?: number
+  /** Estimated-token budget for one distillation request; a corpus beyond it is read window by window. Defaults to 60000. */
+  readonly maxPromptTokens?: number
   /** Output-token cap for the distillation request. Defaults to 16000. */
   readonly maxOutputTokens?: number
   /** Cap on one complete rendered tool output in characters. Defaults to 20000. */
@@ -105,7 +109,7 @@ export const Config: z<Config> = z.object({
   maxPosts: z.number().step(1).min(1).max(1000).default(DEFAULT_MAX_POSTS),
   maxCorpusPosts: z.number().step(1).min(1).max(100_000).default(DEFAULT_MAX_CORPUS_POSTS),
   maxCorpusReplies: z.number().step(1).min(1).max(100_000).default(DEFAULT_MAX_CORPUS_REPLIES),
-  maxPromptChars: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_MAX_PROMPT_CHARS),
+  maxPromptTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_MAX_PROMPT_TOKENS),
   maxOutputTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_MAX_OUTPUT_TOKENS),
   maxOutputChars: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_MAX_OUTPUT_CHARS),
   timeoutMs: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_TIMEOUT_MS),
@@ -136,7 +140,7 @@ export function apply(ctx: Context, config: Config): void {
     maxPosts: resolved.maxPosts,
     maxCorpusPosts: resolved.maxCorpusPosts,
     maxCorpusReplies: resolved.maxCorpusReplies,
-    maxPromptChars: resolved.maxPromptChars,
+    maxPromptTokens: resolved.maxPromptTokens,
     maxOutputTokens: resolved.maxOutputTokens,
     maxOutputChars: resolved.maxOutputChars,
     timeoutMs: resolved.timeoutMs,

@@ -22,7 +22,7 @@ import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import * as toolBloggerSkill from '@deepseek-ai/dsh-tool-blogger-skill'
 import { resolveRoot } from '../src/tools.ts'
 import type { TempRoot, StubIdentity } from './helpers.ts'
-import { profileAnswer, ScriptedAdapter, STUB_POSTS, STUB_REPLIES, StubBloggerSource, tempRoot, textResponse } from './helpers.ts'
+import { profileAnswer, RoutingAdapter, STUB_POSTS, STUB_REPLIES, StubBloggerSource, tempRoot } from './helpers.ts'
 
 const testSignal = new AbortController().signal
 
@@ -67,7 +67,7 @@ async function mount(options: MountOptions = {}): Promise<Harness> {
   await ctx.plugin(BloggerSourceRegistry)
   const source = new StubBloggerSource(options.posts ?? STUB_POSTS, options.replies ?? STUB_REPLIES, options.identity, options.hasMore)
   ctx.bloggers.register(source)
-  ctx.llm.registerAdapter(['stub-provider'], new ScriptedAdapter(textResponse(options.script ?? profileAnswer())))
+  ctx.llm.registerAdapter(['stub-provider'], new RoutingAdapter(undefined, options.script ?? profileAnswer()))
 
   const loader = Object.create(Loader.prototype) as Loader
   const unwrapped = loader.unwrapExports(toolBloggerSkill) as Parameters<Context['plugin']>[0]
@@ -376,7 +376,8 @@ describe('blogger_build_skill', () => {
       posts: 2,
       postsWithBody: 2,
       replies: 2,
-      digestTruncated: false,
+      passes: 1,
+      notesReused: 0,
     })
     const path = join(skillsRoot, 'stub-blogger-buy-the-dip', 'SKILL.md')
     expect((out.value as { skillPath: string }).skillPath).toBe(path)
@@ -439,15 +440,30 @@ describe('blogger_build_skill', () => {
     expect(out.error.info?.code).toBe('BLOGGER_PROFILE_INVALID')
   })
 
-  it('reports a truncated digest when the corpus exceeds the prompt budget', async () => {
-    const { call } = await mount({ config: { maxPromptChars: 30 } })
+  it('reads a corpus beyond the request budget in windows and reuses their notes', async () => {
+    const replies = Array.from({ length: 20 }, (_, index) => ({
+      id: `codeA/${index}`,
+      url: `https://stub.example/a/codeA/${index}`,
+      topicTitle: 'Someone else',
+      topicUrl: 'https://stub.example/a/other',
+      repliedAt: '2026-01-03 09:00',
+      body: '追涨杀跌'.repeat(20),
+    }))
+    const { call } = await mount({ config: { maxPromptTokens: 400 }, replies })
     await call('blogger_harvest', { user: USER })
 
-    const out = await call('blogger_build_skill', { user: USER })
+    const first = await call('blogger_build_skill', { user: USER })
+    const second = await call('blogger_build_skill', { user: USER })
 
-    expect(out.isError).toBe(false)
-    if (out.isError) return
-    expect(out.value).toMatchObject({ digestTruncated: true })
+    expect(first.isError).toBe(false)
+    expect(second.isError).toBe(false)
+    if (first.isError || second.isError) return
+    expect((first.value as { passes: number }).passes).toBeGreaterThan(1)
+    expect(second.value).toMatchObject({ passes: 1 })
+    expect((second.value as { notesReused: number }).notesReused).toBeGreaterThan(0)
+    expect(second.content[0]).toMatchObject({
+      text: expect.stringContaining('window note(s) reused from') as string,
+    })
   })
 
   it('builds a skill for a blogger with no display name', async () => {

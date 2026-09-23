@@ -52,7 +52,7 @@ kind: "package-reference"
 | `maxPostPages` / `maxReplyPages` | `3` | 单次采集主贴、跟帖的页数预算；工具会拒绝更大的参数 |
 | `maxPosts` | `20` | 单次采集可抓取的正文篇数；工具会拒绝更大的参数 |
 | `maxCorpusPosts` / `maxCorpusReplies` | `300` / `600` | 单份语料保留的记录条数 |
-| `maxPromptChars` | `400000` | 发送给模型的语料摘要字符预算 |
+| `maxPromptTokens` | `60000` | 单次请求的估算 Token 预算；超出预算的语料会按窗口分批读取 |
 | `maxOutputTokens` | `16000` | 蒸馏请求的输出 Token 上限 |
 | `maxOutputChars` | `20000` | 单次渲染工具输出的上限 |
 | `timeoutMs` | `600000` | 工具调用的协作式超时预算（毫秒） |
@@ -60,7 +60,7 @@ kind: "package-reference"
 ### 两个工具
 
 - `blogger_harvest` —— 解析 `user`（或 `user` 加显式 `source`）并采集一段页窗口。`postStartPage` 与 `replyStartPage` 决定两侧列表各自的起点，因此第二次调用能取到第一次取不到的页。它把结果合并进已存语料，保留更早一次采集已抓到的正文，并返回语料总量、本次新增量与分页事实，其中包含下次该传的页码。
-- `blogger_build_skill` —— 读取该语料并蒸馏为两个文件。`SKILL.md` 是产物本身：一份祈使句写成的操作规程，覆盖适用范围、决策主干、判断规则、执行、仓位、禁止事项与操作前自检。其旁的 `portrait.md` 承载为这些规则提供依据的原文引用、日期与案例，`SKILL.md` 会链接到它。`skillName` 可覆盖模型提议的名称；文件写入 `<skillsRoot>/<skillName>/` 下。
+- `blogger_build_skill` —— 读取该语料并蒸馏为两个文件。能装进 `maxPromptTokens` 的语料一次读完；更大的语料按窗口分批读，每个窗口在 `<corpusRoot>/notes/<source>-<userID>/` 下写一份证据笔记，再由一次归并把这些笔记变成技能。窗口内容未变时其笔记会被复用而不重新生成。`SKILL.md` 是产物本身：一份祈使句写成的操作规程，覆盖适用范围、决策主干、判断规则、执行、仓位、禁止事项与操作前自检。其旁的 `portrait.md` 承载为这些规则提供依据的原文引用、日期与案例，`SKILL.md` 会链接到它。`skillName` 可覆盖模型提议的名称；文件写入 `<skillsRoot>/<skillName>/` 下。
 
 ### 语料
 
@@ -104,7 +104,7 @@ kind: "package-reference"
 
 ### 蒸馏流程
 
-`blogger_build_skill` 渲染有界的语料摘要、把确切请求追加到会话日志、流式调用 `ctx.llm`、检查终态结束原因、解析答案并写入两个文件。该请求是手工构建而非由循环构建，因此自带系统提示词、被深度冻结，且从不被标记为循环请求。一次调用同时产出两份文档，是因为它们必须彼此一致：规程陈述规则，画像则持有恰好支撑这些规则的依据。答案由一个只含 name 与 description 的 JSON 头，以及两条标记行之间的两份纯 markdown 文档组成——这么长的文档无法在 JSON 字符串转义中存活。解析失败时会把模型实际写出的前 300 个字符一并报出，供下一次调用修正。
+`blogger_build_skill` 把语料渲染成有序块，按 `maxPromptTokens` 分组成窗口，逐窗口读出证据笔记，再把笔记归并为两份文档。每个请求都是手工构建而非由循环构建，因此自带系统提示词、被深度冻结，且从不被标记为循环请求。归并一遍同时产出两份文档，是因为它们必须彼此一致：规程陈述规则，画像则持有恰好支撑这些规则的依据。归并的答案由一个只含 name 与 description 的 JSON 头，以及两条标记行之间的两份纯 markdown 文档组成——这么长的文档无法在 JSON 字符串转义中存活。解析失败时会把模型实际写出的前 300 个字符一并报出，供下一次调用修正。
 
 </details>
 
@@ -140,7 +140,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-`blogger_harvest` 先渲染一行摘要，给出源、用户 ID、显示名、主贴与正文数、跟帖数；再渲染一行说明本次新增了多少、读取了哪一段页窗口；随后在任一侧仍有更多时，给出下次该传的确切 `postStartPage` 或 `replyStartPage`；最后给出语料路径。`blogger_build_skill` 渲染技能名、参与蒸馏的条数、规程路径、画像路径、描述与摘要大小。被截断的输出以 `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)` 结尾；失败呈现为 `Error: <message>`。
+`blogger_harvest` 先渲染一行摘要，给出源、用户 ID、显示名、主贴与正文数、跟帖数；再渲染一行说明本次新增了多少、读取了哪一段页窗口；随后在任一侧仍有更多时，给出下次该传的确切 `postStartPage` 或 `replyStartPage`；最后给出语料路径。`blogger_build_skill` 渲染技能名、参与蒸馏的条数、规程路径、画像路径、描述，以及读了多少证据、用了多少次模型请求。被截断的输出以 `(Output truncated. Narrow the request — fewer pages or fewer posts — for the rest.)` 结尾；失败呈现为 `Error: <message>`。
 
 #### Token 影响
 
@@ -158,8 +158,8 @@ kind: "package-reference"
 
 - **模型只看到计数，看不到内容** —— 工具结果不携带采集到的文本，因此模型无法评判语料本身，只能决定是否继续采集或开始蒸馏。想阅读原文的用户请使用源自身的工具。
 - **重新生成会覆盖** —— `blogger_build_skill` 无条件写入 `<skillsRoot>/<name>/SKILL.md` 及其 `portrait.md`，因此用已有名称重新生成会直接替换这两个文件，既不合并也不确认。
-- **规程的质量取决于语料** —— 只有寥寥数篇主贴的博主，模型无法把规则建立在反复出现的行为之上，而本包也无法区分语料厚薄。规程自身的「适用范围」一节就是模型对此的诚实交代；会话日志记录了摘要字符数。
-- **摘要是直接截断** —— `maxPromptChars` 在块边界截断语料，因此超大语料会从提示词中丢失最旧的主贴与跟帖，而模型除 `digestTruncated` 标志外无从得知丢了哪些。
+- **规程的质量取决于语料** —— 只有寥寥数篇主贴的博主，模型无法把规则建立在反复出现的行为之上，而本包也无法区分语料厚薄。规程自身的「适用范围」一节就是模型对此的诚实交代；会话日志记录了证据规模与请求次数。
+- **超出单次请求的语料会分窗口读取** —— 归并一遍要读完所有窗口笔记，因此当一个语料大到需要非常多窗口时，最终会超出该预算并以 `BLOGGER_EVIDENCE_TOO_LARGE` 显式失败，而不是发出一个被截断的请求。分层归并是后续要做的事。
 - **蒸馏只尝试一次** —— 该请求是手工构建的 `ctx.llm.stream` 调用，从不重试；提供者失败会呈现给模型，由模型再次调用工具。
 
 <a id="dev-note"></a>

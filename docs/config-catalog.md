@@ -3388,8 +3388,8 @@ export interface Config {
   readonly maxCorpusPosts?: number
   /** Maximum replies one corpus retains. Defaults to 600. */
   readonly maxCorpusReplies?: number
-  /** Character budget for the corpus digest. Defaults to 400000. */
-  readonly maxPromptChars?: number
+  /** Estimated-token budget for one distillation request; a corpus beyond it is read window by window. Defaults to 60000. */
+  readonly maxPromptTokens?: number
   /** Output-token cap for the distillation request. Defaults to 16000. */
   readonly maxOutputTokens?: number
   /** Cap on one complete rendered tool output in characters. Defaults to 20000. */
@@ -3399,7 +3399,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/tool-blogger-skill/src/index.ts:69`](../packages/skill/tool-blogger-skill/src/index.ts)
+Source: [`packages/skill/tool-blogger-skill/src/index.ts:73`](../packages/skill/tool-blogger-skill/src/index.ts)
 
 <a id="deepseek-aidsh-tool-fs"></a>
 
